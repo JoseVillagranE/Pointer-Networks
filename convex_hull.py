@@ -10,6 +10,7 @@ import sys
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull, convex_hull_plot_2d
 import functools
+from time import time
 
 from dataset import CHDataset
 sys.path.insert(0, "D:/matricula u chile 2015/12 semestre/Trabajo_dirigido/Diego/codigo/PointerNetwork-PyTorch-master")
@@ -129,7 +130,8 @@ def PlotLossCurve(Loss, title, shape = (10, 10)):
 
 def training(model, train_ds, eval_ds, cudaAvailable, batchSize=1, attention_size=128, beam_width=2, lr=1e-3, clip_norm=5.0,
              weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5):
-
+    
+  t0 = time()
 #  # Pytroch configuration
   if cudaAvailable:
     use_cuda = True
@@ -170,7 +172,6 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=1, attention_siz
       loss = criterion(b_outp_out, align_score, b_outp_len)
 
       l = loss.item()
-      listOfLoss.append(l)
       total_loss += l
       batch_cnt += 1
 
@@ -178,7 +179,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=1, attention_siz
       clip_grad_norm(model.parameters(), clip_norm)
       optimizer.step()
     print("Epoch : {}, loss {}".format(epoch, total_loss / batch_cnt))
-    
+    listOfLoss.append(total_loss/batch_cnt)
     
     if(epoch%freqEval==0):
         model.eval()
@@ -201,13 +202,14 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=1, attention_siz
             loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len)
             l = loss.item()
             total_loss_eval += l
-            listOfLossEval.append(l)
             batch_cnt += 1
         print("Epoch: {}, Eval Loss {}".format(epoch, total_loss_eval/batch_cnt))
+        listOfLossEval.append(total_loss_eval/batch_cnt)
   
   # ext. is .pt 
   torch.save(model.state_dict(), model_file)
-  
+  t1 = time()
+  print("Training of Pointer Network takes: {}".format(t1-t0))
   return listOfLoss, listOfLossEval
   
   
