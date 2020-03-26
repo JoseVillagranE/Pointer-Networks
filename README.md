@@ -11,6 +11,11 @@ son Convex-Hull, triangulación y TSP. La arquitecura de la red neuronal se pres
 
 ![alt text](https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/PtrNeural.png)
 
+Una ventaja que posee este tipo de modelos con respecto a modelos secuencia-a-secuencia (sequence-to-sequence) es la no-dependencia del largo de la entrada con respecto al largo de la salida,
+pudiendo diferenciarse entre ambas variables. Dicha caracteristica se posibilita gracias a la modificacion del model de atención que realizó Oriol Vinyals en el paper original.
+
+$$ u_{i}^{j} = v^{T}tanh(W_{1}e_j + W_{2}d_i) \quad j \in (1,\ldots, n)$$
+
  
 
  
