@@ -54,22 +54,23 @@ def eval_one_example(model, example):
     
     model = model.eval().cpu()
     
-    inp_len = example[1]
+    model.eval()
+    inp, inp_len, outp_in, outp_out, outp_len = example
+    inp_t = Variable(torch.from_numpy(np.array([inp])))
+    inp_len = torch.from_numpy(inp_len)
+    outp_in = Variable(torch.from_numpy(np.array([outp_in])))
+    outp_out = Variable(torch.from_numpy(outp_out))
+    align_score = model(inp_t, inp_len, outp_in, outp_len)
+    align_score = align_score.detach().numpy()
+    idxs = np.argmax(align_score[0], axis=1)
+    idxs = PreProcessOutput(idxs)
     
-#    inp_len_array = np.array([inp_len for i in range(example[0].shape[0])])
+    inp = inp[1:, :]
+    plt.figure(figsize=(10,10))
+    plt.plot(inp[:,0], inp[:,1], 'o')
+    for i in range(idxs.shape[0]-1):
+        plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
         
-    
-    eval_inp = torch.from_numpy(example[0])
-    eval_inp_len = torch.from_numpy(inp_len)
-    eval_outp_in = torch.from_numpy(example[2])
-    eval_outp_out = torch.from_numpy(example[3])
-    eval_outp_len = torch.from_numpy(example[4])
-    
-    align_score = model(eval_inp, eval_inp_len, eval_outp_in, eval_outp_len)
-    align_score = align_score.cpu().detach().numpy()
-    f_score = align_score[0, :, :]
-    idxs = np.argmax(f_score, axis=1)  
-    plot_convex_hull(eval_inp[0, :, :].cpu().detach().numpy(), idxs)
 
 def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
     model.eval()
@@ -96,8 +97,8 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
             b_eval_outp_len = b_eval_outp_len.cuda()
         
         align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
-        align_score = align_score.cpu().detach().numpy()
-        idxs = np.argmax(align_score[0], axis=1)
+        align_score = align_score[0].cpu().detach().numpy()
+        idxs = np.argmax(align_score, axis=1)
         b_eval_outp_out = b_eval_outp_out.cpu().detach().numpy()
         b_eval_outp_out = b_eval_outp_out.squeeze()
         idxs = PreProcessOutput(idxs)
@@ -168,7 +169,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=1, attention_siz
         b_outp_len = b_outp_len.cuda()
       
       optimizer.zero_grad()
-      align_score = model(b_inp, b_inp_len, b_outp_in, b_outp_len)
+      align_score, _, _ = model(b_inp, b_inp_len, b_outp_in, b_outp_len)
       loss = criterion(b_outp_out, align_score, b_outp_len)
 
       l = loss.item()
@@ -198,7 +199,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=1, attention_siz
                 b_eval_outp_out = b_eval_outp_out.cuda()
                 b_eval_outp_len = b_eval_outp_len.cuda()
             
-            align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
+            align_score, _, _ = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
             loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len)
             l = loss.item()
             total_loss_eval += l
@@ -218,11 +219,11 @@ if __name__ == "__main__":
     train_filename="./data/convex_hull_50_train.txt" 
     val_filename = "./data/convex_hull_50_test.txt"
     cudaAvailable = torch.cuda.is_available()
-#    cudaAvailable = False
     max_in_seq_len=50
     max_out_seq_len=11
     num_layers = 1
     rnn_hidden_size = 32
+    save_model_file = "ConvexHull.pt"
     
     model = PointerNet("LSTM", True, num_layers, 2, rnn_hidden_size, 0.0)
     
@@ -232,12 +233,18 @@ if __name__ == "__main__":
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
-#    model.load_state_dict(torch.load("PointerModel.pt"))
-    training(model, train_ds, eval_ds, cudaAvailable, nepoch=100)
-#    eval_model(model, train_ds, cudaAvailable)    
-#    example = train_ds.__getitem__(0)
+    # Descomentar si existe algún modelo
+    # model.load_state_dict(torch.load("PointerModel.pt"))
+    
+    # Entrenamiento
+    
+    list_Loss, Loss_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=100, model_file = save_model_file)
+
+    # Evaluación del modelo en un conjunto de evaluación
+    eval_model(model, train_ds, cudaAvailable)    
   
-  
+    #    title="Trainning_Loss"
+    #    PlotLossCurve(list_Loss, title, shape = (10, 10))
 
     
     

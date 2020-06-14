@@ -74,8 +74,8 @@ def plot_one_tour(model, example, cudaAvailable):
     outp_in = Variable(torch.from_numpy(np.array([outp_in])))
     outp_out = Variable(torch.from_numpy(outp_out))
     align_score = model(inp_t, inp_len, outp_in, outp_len)
-    align_score = align_score.detach().numpy()
-    idxs = np.argmax(align_score[0], axis=1)
+    align_score = align_score[0].detach().numpy()
+    idxs = np.argmax(align_score, axis=1)
     idxs = PreProcessOutput(idxs)
     
     inp = inp[1:, :]
@@ -173,12 +173,12 @@ if __name__ == "__main__":
     train_filename="./data/tsp5.txt" 
     val_filename = "./data/tsp5_test.txt"
     cudaAvailable = torch.cuda.is_available()
-#    cudaAvailable = False
+    
     seq_len = 5
     num_layers = 1
-    encoder_input_size = 2
+    encoder_input_size = 2 
     rnn_hidden_size = 32
-    
+    save_model_name = "PointerModel.pt"
     model = PointerNet("LSTM", True, num_layers, encoder_input_size, rnn_hidden_size, 0.0)
     
     train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
@@ -187,9 +187,14 @@ if __name__ == "__main__":
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
-    model.load_state_dict(torch.load("TSPModel.pt"))
-#    TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=100)
-#    eval_model(model, eval_ds, cudaAvailable)
-    example = eval_ds.__getitem__(0)
-    plot_one_tour(model, example, cudaAvailable)    
-#    example = train_ds.__getitem__(0)
+    # Descomentar si es que existe un modelo "TSPModel.pt"
+    # model.load_state_dict(torch.load("TSPModel.pt"))
+    
+    # Entrenamiento del modelo
+    TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=100, model_file=save_model_name)
+    # Evaluación del modelo en un conjunto de evaluación
+    eval_model(model, eval_ds, cudaAvailable)
+
+    # Grafica un viaje de ejemplo
+    # example = eval_ds.__getitem__(0)
+    # plot_one_tour(model, example, cudaAvailable)    

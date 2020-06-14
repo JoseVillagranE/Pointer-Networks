@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 def rnn_factory(rnn_type, **kwargs):
   pack_padded_seq = True
   if rnn_type in ["LSTM", "GRU", "RNN"]:
-    rnn = getattr(nn, rnn_type)(**kwargs)
+    rnn = getattr(nn, rnn_type)(**kwargs) # Call the method of torch for LSTM, GRU or RNN
   return rnn, pack_padded_seq
 
 class EncoderBase(nn.Module):
@@ -63,7 +63,6 @@ class RNNEncoder(EncoderBase):
     if self.pack_padded_seq and lengths is not None:
       lengths = lengths.view(-1).tolist()
       packed_src = pack(src, lengths)
-
     memory_bank, hidden_final = self.rnn(packed_src, hidden)
 
     if self.pack_padded_seq and lengths is not None:

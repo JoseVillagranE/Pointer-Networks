@@ -26,12 +26,21 @@ class Attention(nn.Module):
     dim : input dimension size
   """
   def __init__(self, attn_type, dim):
-    super(Attention, self).__init__()
+    super().__init__()
     self.attn_type = attn_type
+    
+    bz_size = 10
+    tgt_size = 6 # Debes cambiar esto
+    
     bias_out = attn_type == "mlp"
     self.linear_out = nn.Linear(dim *2, dim, bias_out)
-    if self.attn_type == "general":
-      self.linear = nn.Linear(dim, dim, bias=False)
+    self.v = 0
+    if self.attn_type == "RL":
+        self.W_ref = nn.Linear(dim, dim, bias=False)
+        self.W_q = nn.Linear(dim, dim, bias=False)
+        self.v = torch.FloatTensor(torch.ones((bz_size, 1, tgt_size))).cuda()
+    elif self.attn_type == "general":
+        self.linear = nn.Linear(dim, dim, bias=False)
     elif self.attn_type == "dot":
       pass
     else:
@@ -46,20 +55,30 @@ class Attention(nn.Module):
     bz, src_len, dim = src.size()
     _, tgt_len, _ = tgt.size()
 
-    if self.attn_type in ["genenral", "dot"]:
+    if self.attn_type in ["general", "dot", "RL"]:
       tgt_ = tgt
-      if self.attn_type == "general":
-        tgt_ = self.linear(tgt_)
-      src_ = src.transpose(1, 2)
-      return torch.bmm(tgt_, src_)
+      src_ = src
+      if self.attn_type == "RL":
+            tgt_ = self.W_q(tgt_)
+            src_ = self.W_ref(src)
+      elif self.attn_type == "general":
+          tgt_ = self.linear(tgt_)
+      src_ = src_.transpose(1, 2)
+      
+      if self.attn_type in ["general", "dot"]:
+          return torch.bmm(tgt_, src_)
+      elif type(self.v)=='torch.Tensor':
+          return torch.bmm(self.v, torch.tanh(torch.bmm(tgt_, src_)))
+      else:
+          return torch.tanh(torch.bmm(tgt_, src_))
     else:
       raise NotImplementedError()
   
   def forward(self, src, tgt, src_lengths=None):
     """
     Args:
-      src : source values (bz, src_len, dim)
-      tgt : target values (bz, tgt_len, dim)
+      src : source values (bz, src_len, dim). enc_i or ref in Bello's Paper
+      tgt : target values (bz, tgt_len, dim). dec_i or q
       src_lengths : source values length
     """
     if tgt.dim() == 2:
@@ -79,16 +98,18 @@ class Attention(nn.Module):
       # so mask can broadcast
       mask = mask.unsqueeze(1)
       align_score.data.masked_fill_(~mask, -float('inf'))
-    
+    align_score = align_score.squeeze()
     # Normalize weights
     align_score = F.softmax(align_score, -1)
-
-    c = torch.bmm(align_score, src)
-
-    concat_c = torch.cat([c, tgt], -1)
-    attn_h = self.linear_out(concat_c)
-    if one_step:
-      attn_h = attn_h.squeeze(1)
-      align_score = align_score.squeeze(1)
+    
+    attn_h = 0
+    if self.attn_type == "general":
+        c = torch.bmm(align_score, src)
+    
+        concat_c = torch.cat([c, tgt], -1)
+        attn_h = self.linear_out(concat_c)
+        if one_step:
+          attn_h = attn_h.squeeze(1)
+          align_score = align_score.squeeze(1)
     
     return attn_h, align_score
