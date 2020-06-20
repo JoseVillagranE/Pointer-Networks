@@ -19,7 +19,7 @@ class RNNDecoderBase(nn.Module):
   """
   def __init__(self, rnn_type, bidirectional, num_layers,
     input_size, hidden_size, dropout):
-    super(RNNDecoderBase, self).__init__()
+    super().__init__()
     if bidirectional:
       assert hidden_size % 2 == 0
       hidden_size = hidden_size // 2

@@ -23,7 +23,7 @@ class Attention(nn.Module):
   """ Attention layer
   Args:
     attn_type : attention type ["dot", "general"]
-    dim : input dimension size
+    dim : hidden dimension size
   """
   def __init__(self, attn_type, dim):
     super().__init__()
@@ -34,6 +34,7 @@ class Attention(nn.Module):
     
     bias_out = attn_type == "mlp"
     self.linear_out = nn.Linear(dim *2, dim, bias_out)
+    self.conv_proj = nn.Conv1d(dim, dim, 1 , 1)
     self.v = 0
     if self.attn_type == "RL":
         self.W_ref = nn.Linear(dim, dim, bias=False)
@@ -52,8 +53,8 @@ class Attention(nn.Module):
       src : source values (bz, src_len, dim)
       tgt : target values (bz, tgt_len, dim)
     """
-    bz, src_len, dim = src.size()
-    _, tgt_len, _ = tgt.size()
+    # bz, src_len, dim = src.size()
+    # _, tgt_len, _ = tgt.size()
 
     if self.attn_type in ["general", "dot", "RL"]:
       tgt_ = tgt
@@ -87,8 +88,8 @@ class Attention(nn.Module):
     else:
       one_step = False
     
-    bz, src_len, dim = src.size()
-    _, tgt_len, _ = tgt.size()
+    # bz, src_len, dim = src.size()
+    # _, tgt_len, _ = tgt.size()
 
     align_score = self.score(src, tgt)
 
@@ -98,18 +99,20 @@ class Attention(nn.Module):
       # so mask can broadcast
       mask = mask.unsqueeze(1)
       align_score.data.masked_fill_(~mask, -float('inf'))
-    align_score = align_score.squeeze()
+    # align_score = align_score.squeeze()
     # Normalize weights
-    align_score = F.softmax(align_score, -1)
-    
+    align_score = F.softmax(align_score.squeeze(), -1)
+
+    align_score = align_score.unsqueeze(2).transpose(1,2)
     attn_h = 0
-    if self.attn_type == "general":
+    if self.attn_type in ["general", "dot"]:
         c = torch.bmm(align_score, src)
-    
         concat_c = torch.cat([c, tgt], -1)
         attn_h = self.linear_out(concat_c)
         if one_step:
           attn_h = attn_h.squeeze(1)
           align_score = align_score.squeeze(1)
-    
-    return attn_h, align_score
+    else:
+        src = src.transpose(1, 2)
+        attn_h = self.conv_proj(src)
+    return attn_h, align_score # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]

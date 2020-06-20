@@ -17,8 +17,9 @@ import numpy as np
 from layers.seq2seq.encoder import RNNEncoder
 from layers.seq2seq.decoder import RNNDecoderBase
 from layers.attention import Attention, sequence_mask
+from torch import optim
 
-def GlimpseFunction(ref, atten_prob, sum_=False):
+def GlimpseFunction(ref, attn_prob):
     """
     input: 
         ref: salida del encoder(ref -> Bello)
@@ -26,11 +27,9 @@ def GlimpseFunction(ref, atten_prob, sum_=False):
     output:
         outp: salida de la función Glimpse
     """
-#    ref = ref.transpose(2, 1)
-    outp = torch.bmm(atten_prob, ref)
-    if sum_:
-        
-        outp = outp.sum(dim=1)
+    ref = ref.transpose(2, 1)
+    sm = nn.Softmax()
+    outp = torch.bmm(sm(attn_prob), ref)
     return outp
     
 
@@ -54,6 +53,7 @@ class CriticNetwork(nn.Module):
         
         self.is_cuda_available = is_cuda_available
         
+        
         if is_cuda_available:
             self.encoder = self.encoder.cuda()
             self.process_block = self.process_block.cuda()
@@ -62,30 +62,25 @@ class CriticNetwork(nn.Module):
         
         
         
-    def forward(self, memory_bank, outp_in, inp_len):
+    def forward(self, inp, inp_len):
         
         '''
         input:
-            memory_bank: Estado oculto(h) o espacio latente del encoder (enc_i)
-            outp_in: salida del decoder (dec_i) procesando una distribución prior
+            inp: Muestras de Tour
             inp_len: cantidad de coordenas más una variable dummy
         output:
-            outp: Salida del Glimpse function
+            outp: Baseline calculado por el critic.
         
         '''
-#        inp = inp.transpose(0, 1)
-        
-#        memory_bank, tuple_hidden_final = self.encoder(inp, inp_len)# Estas seguro que se realiza este paso de nuevo?
-#        hidden_final, c_n = tuple_hidden_final
+        inp = inp.transpose(0, 1)
+        memory_bank, (hidden, c_n) = self.encoder(inp, inp_len)
+        memory_bank = memory_bank.transpose(0, 1) # [batch_size, emb_size, emb_size]
+        hidden = hidden.transpose(0, 1) # [batch_size, 1, hidden_size]
         for i in range(self.process_block_iter):
-            attn_h, align_score = self.process_block(memory_bank, outp_in, inp_len) # modifica las dimensiones de la matriz. Se debe verificar
-            if i == self.process_block_iter - 1:
-                
-                outp_in =  GlimpseFunction(outp_in, self.sm(align_score), sum_=True)
-            else:
-                outp_in =  GlimpseFunction(outp_in, self.sm(align_score))
+            attn_h, align_score = self.process_block(memory_bank, hidden) # modifica las dimensiones de la matriz. Se debe verificar
+            hidden = GlimpseFunction(attn_h, align_score)
         
-        outp = self.decoder(outp_in)
+        outp = self.decoder(hidden)
         
         return outp
         

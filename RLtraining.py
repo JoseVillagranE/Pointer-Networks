@@ -162,14 +162,15 @@ class NeuronalOptm:
         embedding_dim = torch.ones((batch_size, inp_len_seq + 1, 2)) # agreganado dummy variable
         embedding_ = torch.FloatTensor(embedding_dim)
         self.embedding = nn.Parameter(embedding_)
-        self.embedding.data.uniform_(-(1. / math.sqrt(inp_len_seq)), 1. / math.sqrt(inp_len_seq))
-        
+        # self.embedding.data.uniform_(-(1. / math.sqrt(inp_len_seq)), 1. / math.sqrt(inp_len_seq))
+        self.embedding.data.uniform_(0, 1. / math.sqrt(inp_len_seq))
         
         self.is_cuda_available = torch.cuda.is_available()
         self.critic = CriticNetwork(rnn_type, num_layers, bidirectional, embedding_dim_critic,
                                     hidden_dim_critic, process_block_iter, is_cuda_available=self.is_cuda_available)
         
-        
+        self.optim_critic = optim.Adam(self.critic.parameters(), lr=lr)
+        self.critic_loss = torch.nn.MSELoss()
         
     def step(self, batch_inp, batch_inp_len, batch_outp_out, batch_outp_len, clip_norm=5.0):
         
@@ -193,16 +194,15 @@ class NeuronalOptm:
             self.embedding = self.embedding.cuda()
         
         # Output of actor net
-        align_score, memory_bank, dec_memory_bank = self.model(batch_inp, batch_inp_len, self.embedding, batch_outp_len)
+        align_score, memory_bank, dec_memory_bank, idxs = self.model(batch_inp, batch_inp_len, self.embedding, batch_outp_len)
         #Output of critic net
         memory_bank = memory_bank.transpose(0, 1)
-        baseline = self.critic(memory_bank, dec_memory_bank, batch_inp_len)
+        baseline = self.critic(batch_inp, batch_inp_len)
         baseline = baseline.squeeze()
-        idxs = torch.argmax(align_score, dim=2)
-#        idxs = PreProcessOutput(idxs)
         
         sample_solution = tensor_sort(batch_inp.detach(), idxs)
         
+        # print("sample_solution: {}".format(sample_solution))
         tour_length = Reward(sample_solution.detach(), self.is_cuda_available)
         
         #dos formas para calcular el loss
@@ -227,21 +227,29 @@ class NeuronalOptm:
         log_probs[(log_probs < -1000).detach()] = 0.
         
         # print("tour_length: {}".format(tour_length))
-        # print("baseline: {}".format(baseline))
-        actor_loss = (tour_length-baseline)*log_probs
+        # print("baseline: {}".format(baseline.shape))
+        # print(log_probs.shape)
+        actor_loss = (abs(tour_length-baseline))*log_probs
         
         actor_loss = actor_loss.mean()
         
-         
-         
         self.optimizer.zero_grad()
         
-        actor_loss.backward()
+        actor_loss.backward(retain_graph=True)
         actor_loss_item = actor_loss.item()
         clip_grad_norm(self.model.parameters(), clip_norm)
         
+        critic_loss = self.critic_loss(baseline, tour_length)
+        self.optim_critic.zero_grad()
+        critic_loss.backward()
+        critic_loss_item = critic_loss.item()
+        clip_grad_norm(self.critic.parameters(), clip_norm)
+        
+        self.optim_critic.step()
         self.optimizer.step()
-        return actor_loss_item
+        
+        tour_length_mean = tour_length.mean()
+        return actor_loss_item, critic_loss_item, tour_length_mean
     
     def training(self, train_ds, eval_ds, attention_size=128, beam_width=2,
                  lr=1e-3, clip_norm=5.0, weight_decay=0.1, nepoch = 30, 
@@ -260,6 +268,7 @@ class NeuronalOptm:
             
             self.model = self.model.train()
             actor_total_loss = 0.
+            critic_total_loss = 0.
             batch_cnt = 0.
             for b_inp, b_inp_len, b_outp_in, b_outp_out, b_outp_len in train_dl:
                 b_inp = Variable(b_inp)
@@ -272,10 +281,11 @@ class NeuronalOptm:
                     b_outp_out = b_outp_out.cuda()
                     b_outp_len = b_outp_len.cuda()
                 
-                actor_loss = self.step(b_inp, b_inp_len, b_outp_out, b_outp_len, clip_norm=clip_norm)
+                actor_loss, critic_loss, tour_length_mean = self.step(b_inp, b_inp_len, b_outp_out, b_outp_len, clip_norm=clip_norm)
                 actor_total_loss += actor_loss
+                critic_total_loss += critic_loss
                 batch_cnt += 1
-            print("Epoch : {}, loss {}".format(epoch, actor_total_loss / batch_cnt))
+            print("Epoch: {0} || Actor Loss:  {1:.6f} || Critic Loss: {2:.3f} || Tour Length: {3:.2f}".format(epoch, actor_total_loss / batch_cnt, critic_total_loss/batch_cnt, tour_length_mean))
             list_of_actor_loss.append(actor_total_loss/batch_cnt)
             # eval_model(self.model, self.embedding, eval_ds, self.is_cuda_available, self.batch_size)
             
@@ -292,14 +302,14 @@ if __name__ == "__main__":
     val_filename = "./data/tsp5_test.txt"
 
     seq_len = 5
-    num_layers = 1
+    num_layers = 1 # Se procesa con sola una celula por coordenada.
     encoder_input_size = 2 
     rnn_hidden_size = 32
     rnn_type = 'LSTM'
-    bidirectional = True
+    bidirectional = False
     embedding_dim_critic = encoder_input_size
     hidden_dim_critic = rnn_hidden_size
-    process_block_iter = 3
+    process_block_iter = 1
     inp_len_seq = seq_len
     lr = 1e-3
     
