@@ -263,12 +263,14 @@ class NeuronalOptm:
 
         
         list_of_actor_loss = []
-        
+        list_of_critic_loss = []
+        list_of_tour_length_mean = []
         for epoch in range(nepoch):
             
             self.model = self.model.train()
             actor_total_loss = 0.
             critic_total_loss = 0.
+            tour_length_total = 0.
             batch_cnt = 0.
             for b_inp, b_inp_len, b_outp_in, b_outp_out, b_outp_len in train_dl:
                 b_inp = Variable(b_inp)
@@ -284,24 +286,30 @@ class NeuronalOptm:
                 actor_loss, critic_loss, tour_length_mean = self.step(b_inp, b_inp_len, b_outp_out, b_outp_len, clip_norm=clip_norm)
                 actor_total_loss += actor_loss
                 critic_total_loss += critic_loss
+                tour_length_total += tour_length_mean
                 batch_cnt += 1
             print("Epoch: {0} || Actor Loss:  {1:.6f} || Critic Loss: {2:.3f} || Tour Length: {3:.2f}".format(epoch, actor_total_loss / batch_cnt, critic_total_loss/batch_cnt, tour_length_mean))
             list_of_actor_loss.append(actor_total_loss/batch_cnt)
+            list_of_critic_loss.append(critic_total_loss/batch_cnt)
+            list_of_tour_length_mean.append(tour_length_total)
             # eval_model(self.model, self.embedding, eval_ds, self.is_cuda_available, self.batch_size)
             
         
         torch.save(self.model.state_dict(), save_model_file)
         t1 = time()
-        print("Training of Pointer Network takes: {}".format(t1-t0))
+        t = t1 - t0
+        hours, rem = divmod(t, 3600)
+        minutes, seconds = divmod(rem, 60)
+        print("Training of Pointer Networks takes: {:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
         
-        return list_of_actor_loss
+        return list_of_actor_loss, list_of_critic_loss, list_of_tour_length_mean
 
 if __name__ == "__main__":
     
-    train_filename="./data/tsp5.txt" 
-    val_filename = "./data/tsp5_test.txt"
+    train_filename="./data/tsp50.txt" 
+    val_filename = "./data/tsp50_test.txt"
 
-    seq_len = 5
+    seq_len = 50
     num_layers = 1 # Se procesa con sola una celula por coordenada.
     encoder_input_size = 2 
     rnn_hidden_size = 32
@@ -323,7 +331,7 @@ if __name__ == "__main__":
                            rnn_hidden_size, embedding_dim_critic, hidden_dim_critic,
                            process_block_iter, inp_len_seq, lr)
     
-    Actor_Training_Loss= trainer.training(train_ds, eval_ds)
+    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds)
         
         
         
