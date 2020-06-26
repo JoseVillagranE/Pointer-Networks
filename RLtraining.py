@@ -146,7 +146,8 @@ class NeuronalOptm:
     
     def __init__(self, rnn_type, bidirectional, num_layers, encoder_input_size,
                  rnn_hidden_size, embedding_dim_critic, hidden_dim_critic, process_block_iter,
-                 inp_len_seq, lr, batch_size=10, attn_type="RL"):
+                 inp_len_seq, lr, batch_size=10, attn_type="RL", decay_rate=0.96,
+                 step_size=5000):
         
         super().__init__()
         self.model = PointerNet(rnn_type, bidirectional, num_layers, 2, rnn_hidden_size, 0, attn_type=attn_type)
@@ -171,6 +172,14 @@ class NeuronalOptm:
         
         self.optim_critic = optim.Adam(self.critic.parameters(), lr=lr)
         self.critic_loss = torch.nn.MSELoss()
+        
+        self.actor_lr_sch = optim.lr_scheduler.StepLR(self.optimizer, step_size=step_size,
+                                                      gamma = decay_rate)
+        self.critic_lr_sch = optim.lr_scheduler.StepLR(self.optim_critic,
+                                                              step_size=step_size,
+                                                              gamma=decay_rate)
+        
+        
         
     def step(self, batch_inp, batch_inp_len, batch_outp_out, batch_outp_len, clip_norm=5.0):
         
@@ -244,9 +253,9 @@ class NeuronalOptm:
         critic_loss.backward()
         critic_loss_item = critic_loss.item()
         clip_grad_norm(self.critic.parameters(), clip_norm)
-        
-        self.optim_critic.step()
-        self.optimizer.step()
+           
+        self.actor_lr_sch.step()
+        self.critic_lr_sch.step()
         
         tour_length_mean = tour_length.mean()
         return actor_loss_item, critic_loss_item, tour_length_mean
@@ -306,8 +315,8 @@ class NeuronalOptm:
 
 if __name__ == "__main__":
     
-    train_filename="./CH_TSP_data/tsp50.txt" 
-    val_filename = "./CH_TSP_data/tsp50_test.txt"
+    train_filename="./CH_TSP_data/tsp_all_len20.txt" 
+    val_filename = "./CH_TSP_data/tsp_20_test.txt"
 
     seq_len = 50
     num_layers = 1 # Se procesa con sola una celula por coordenada.
