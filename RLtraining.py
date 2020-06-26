@@ -330,6 +330,8 @@ if __name__ == "__main__":
     inp_len_seq = seq_len
     lr = 1e-3
     
+    save_model_file="RLPointerModel_TSP20.pt"
+    
     train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
     eval_ds = TSPDataset(val_filename, seq_len, lineCountLimit=100)
     
@@ -340,7 +342,8 @@ if __name__ == "__main__":
                            rnn_hidden_size, embedding_dim_critic, hidden_dim_critic,
                            process_block_iter, inp_len_seq, lr)
     
-    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds)
+    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
+                                                                                     save_model_file=save_model_file)
         
         
         
