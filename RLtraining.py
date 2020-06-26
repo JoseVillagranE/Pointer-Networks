@@ -144,12 +144,12 @@ def eval_model(model, embedding, eval_ds, cudaAvailable, batchSize=1):
 
 class NeuronalOptm:
     
-    def __init__(self, rnn_type, bidirectional, num_layer, encoder_input_size,
+    def __init__(self, rnn_type, bidirectional, num_layers, encoder_input_size,
                  rnn_hidden_size, embedding_dim_critic, hidden_dim_critic, process_block_iter,
                  inp_len_seq, lr, batch_size=10, attn_type="RL"):
         
         super().__init__()
-        self.model = PointerNet(rnn_type, bidirectional, num_layer, 2, rnn_hidden_size, 0, attn_type=attn_type)
+        self.model = PointerNet(rnn_type, bidirectional, num_layers, 2, rnn_hidden_size, 0, attn_type=attn_type)
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         
@@ -306,8 +306,8 @@ class NeuronalOptm:
 
 if __name__ == "__main__":
     
-    train_filename="./data/tsp50.txt" 
-    val_filename = "./data/tsp50_test.txt"
+    train_filename="./CH_TSP_data/tsp50.txt" 
+    val_filename = "./CH_TSP_data/tsp50_test.txt"
 
     seq_len = 50
     num_layers = 1 # Se procesa con sola una celula por coordenada.
