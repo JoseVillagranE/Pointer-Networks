@@ -28,6 +28,26 @@ from TSP import PreProcessOutput
 from TSPDataset import TSPDataset
 import functools
 
+layers_of_interest = ["Linear", "Conv1d"]
+
+def weights_init(module, a=-0.08, b=0.08):
+    
+    """
+    input:
+        Module -> Neural Network Module
+        a -> int. LowerBound
+        b -> int. UpperBound
+    """
+    classname = module.__class__.__name__
+    print(classname)
+    if classname in layers_of_interest:
+        nn.init.uniform_(module.weight, a=a, b=b)
+    elif classname.find("LSTM") != -1:
+        for param in module.parameters():
+            nn.init.uniform(param.data)
+
+
+
 def Reward(sample_solution, is_cuda_available=False):
     '''
     input:
@@ -146,11 +166,12 @@ class NeuronalOptm:
     
     def __init__(self, rnn_type, bidirectional, num_layers, encoder_input_size,
                  rnn_hidden_size, embedding_dim_critic, hidden_dim_critic, process_block_iter,
-                 inp_len_seq, lr, batch_size=10, attn_type="RL", decay_rate=0.96,
-                 step_size=5000):
+                 inp_len_seq, lr, batch_size=10, attn_type="RL", actor_decay_rate=0.96,
+                 critic_decay_rate=0.99, step_size=5000):
         
         super().__init__()
         self.model = PointerNet(rnn_type, bidirectional, num_layers, 2, rnn_hidden_size, 0, attn_type=attn_type)
+        self.model.apply(weights_init)
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         
@@ -170,18 +191,20 @@ class NeuronalOptm:
         self.critic = CriticNetwork(rnn_type, num_layers, bidirectional, embedding_dim_critic,
                                     hidden_dim_critic, process_block_iter, is_cuda_available=self.is_cuda_available)
         
+        self.critic.apply(weights_init)
+        
         self.optim_critic = optim.Adam(self.critic.parameters(), lr=lr)
         self.critic_loss = torch.nn.MSELoss()
         
         self.actor_lr_sch = optim.lr_scheduler.StepLR(self.optimizer, step_size=step_size,
-                                                      gamma = decay_rate)
+                                                      gamma = actor_decay_rate)
         self.critic_lr_sch = optim.lr_scheduler.StepLR(self.optim_critic,
                                                               step_size=step_size,
-                                                              gamma=decay_rate)
+                                                              gamma=critic_decay_rate)
         
         
         
-    def step(self, batch_inp, batch_inp_len, batch_outp_out, batch_outp_len, clip_norm=5.0):
+    def step(self, batch_inp, batch_inp_len, batch_outp_out, batch_outp_len, clip_norm=1.0):
         
         # De momento se obtiene el largo del batch de etiquetas desde el dataset. Esta mal, pero es para no
         # perder tiempo
@@ -274,6 +297,7 @@ class NeuronalOptm:
         list_of_actor_loss = []
         list_of_critic_loss = []
         list_of_tour_length_mean = []
+        steps = 0
         for epoch in range(nepoch):
             
             self.model = self.model.train()
@@ -293,11 +317,13 @@ class NeuronalOptm:
                     b_outp_len = b_outp_len.cuda()
                 
                 actor_loss, critic_loss, tour_length_mean = self.step(b_inp, b_inp_len, b_outp_out, b_outp_len, clip_norm=clip_norm)
+                steps += 1
                 actor_total_loss += actor_loss
                 critic_total_loss += critic_loss
                 tour_length_total += tour_length_mean
                 batch_cnt += 1
-            print("Epoch: {0} || Actor Loss:  {1:.6f} || Critic Loss: {2:.3f} || Tour Length: {3:.2f}".format(epoch, actor_total_loss / batch_cnt, critic_total_loss/batch_cnt, tour_length_mean))
+            
+            print("Epoch: {0} || N_steps: {1} || Actor Loss:  {2:.6f} || Critic Loss: {3:.3f} || Tour Length: {4:.2f}".format(epoch, steps, actor_total_loss / batch_cnt, critic_total_loss/batch_cnt, tour_length_mean))
             list_of_actor_loss.append(actor_total_loss/batch_cnt)
             list_of_critic_loss.append(critic_total_loss/batch_cnt)
             list_of_tour_length_mean.append(tour_length_total)
