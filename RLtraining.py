@@ -39,12 +39,11 @@ def weights_init(module, a=-0.08, b=0.08):
         b -> int. UpperBound
     """
     classname = module.__class__.__name__
-    print(classname)
     if classname in layers_of_interest:
         nn.init.uniform_(module.weight, a=a, b=b)
     elif classname.find("LSTM") != -1:
         for param in module.parameters():
-            nn.init.uniform(param.data)
+            nn.init.uniform_(param.data)
 
 
 
