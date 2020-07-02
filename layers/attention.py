@@ -25,12 +25,10 @@ class Attention(nn.Module):
     attn_type : attention type ["dot", "general"]
     dim : hidden dimension size
   """
-  def __init__(self, attn_type, dim):
+  def __init__(self, attn_type, dim, bz_size, C=None):
     super().__init__()
     self.attn_type = attn_type
-    
-    bz_size = 10
-    tgt_size = 6 # Debes cambiar esto
+    self.C = C
     
     bias_out = attn_type == "mlp"
     self.linear_out = nn.Linear(dim *2, dim, bias_out)
@@ -39,7 +37,7 @@ class Attention(nn.Module):
     if self.attn_type == "RL":
         self.W_ref = nn.Linear(dim, dim, bias=False)
         self.W_q = nn.Linear(dim, dim, bias=False)
-        self.v = torch.FloatTensor(torch.ones((bz_size, 1, tgt_size))).cuda()
+        self.v = torch.FloatTensor(torch.ones((bz_size, 1, dim))).cuda()
     elif self.attn_type == "general":
         self.linear = nn.Linear(dim, dim, bias=False)
     elif self.attn_type == "dot":
@@ -69,7 +67,11 @@ class Attention(nn.Module):
       if self.attn_type in ["general", "dot"]:
           return torch.bmm(tgt_, src_)
       elif type(self.v)=='torch.Tensor':
-          return torch.bmm(self.v, torch.tanh(torch.bmm(tgt_, src_)))
+          u = torch.bmm(self.v, torch.tanh(torch.bmm(tgt_, src_)))
+          if C:
+              return self.C*torch.tanh(u)
+          else:
+              return u
       else:
           return torch.tanh(torch.bmm(tgt_, src_))
     else:

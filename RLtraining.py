@@ -76,7 +76,7 @@ def Reward(sample_solution, is_cuda_available=False):
     return tour_length
 
 
-def tensor_sort(input, idxs):
+def tensor_sort(input, idxs, axis=1):
     
     """
     input:
@@ -87,8 +87,10 @@ def tensor_sort(input, idxs):
     """
     
     d1, d2, d3 = input.size()
-    outp = input[torch.arange(d1).unsqueeze(1).repeat((1, d2)).flatten(), idxs.flatten(), :].view(d1, d2, d3)
-    
+    if axis==1:
+        outp = input[torch.arange(d1).unsqueeze(1).repeat((1, d2)).flatten(), idxs.flatten(), :].view(d1, d2, d3)
+    else:
+        outp = torch.gather(input, 2, idxs.unsqueeze(2))
     return outp
             
 
@@ -165,11 +167,11 @@ class NeuronalOptm:
     
     def __init__(self, rnn_type, bidirectional, num_layers, encoder_input_size,
                  rnn_hidden_size, embedding_dim_critic, hidden_dim_critic, process_block_iter,
-                 inp_len_seq, lr, batch_size=10, attn_type="RL", actor_decay_rate=0.96,
-                 critic_decay_rate=0.99, step_size=5000):
+                 inp_len_seq, lr, C=None, batch_size=10, attn_type="RL", actor_decay_rate=0.96,
+                 critic_decay_rate=0.99, step_size=50):
         
         super().__init__()
-        self.model = PointerNet(rnn_type, bidirectional, num_layers, 2, rnn_hidden_size, 0, attn_type=attn_type)
+        self.model = PointerNet(rnn_type, bidirectional, num_layers, 2, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
         self.model.apply(weights_init)
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
@@ -183,12 +185,12 @@ class NeuronalOptm:
         embedding_dim = torch.ones((batch_size, inp_len_seq + 1, 2)) # agreganado dummy variable
         embedding_ = torch.FloatTensor(embedding_dim)
         self.embedding = nn.Parameter(embedding_)
-        # self.embedding.data.uniform_(-(1. / math.sqrt(inp_len_seq)), 1. / math.sqrt(inp_len_seq))
-        self.embedding.data.uniform_(0, 1. / math.sqrt(inp_len_seq))
+        self.embedding.data.uniform_(-(1. / math.sqrt(inp_len_seq)), 1. / math.sqrt(inp_len_seq))
+        # self.embedding.data.uniform_(0, 1. / math.sqrt(inp_len_seq))
         
         self.is_cuda_available = torch.cuda.is_available()
         self.critic = CriticNetwork(rnn_type, num_layers, bidirectional, embedding_dim_critic,
-                                    hidden_dim_critic, process_block_iter, is_cuda_available=self.is_cuda_available)
+                                    hidden_dim_critic, process_block_iter, batch_size, C=C, is_cuda_available=self.is_cuda_available)
         
         self.critic.apply(weights_init)
         
@@ -203,7 +205,7 @@ class NeuronalOptm:
         
         
         
-    def step(self, batch_inp, batch_inp_len, batch_outp_out, batch_outp_len, clip_norm=1.0):
+    def step(self, batch_inp, batch_inp_len, batch_outp_out, batch_outp_len, clip_norm=10.0):
         
         # De momento se obtiene el largo del batch de etiquetas desde el dataset. Esta mal, pero es para no
         # perder tiempo
@@ -231,18 +233,14 @@ class NeuronalOptm:
         baseline = self.critic(batch_inp, batch_inp_len)
         baseline = baseline.squeeze()
         
-        sample_solution = tensor_sort(batch_inp.detach(), idxs)
-        
+        sample_solution = tensor_sort(batch_inp, idxs)
+        sample_probs = tensor_sort(align_score, idxs, axis=2)
         # print("sample_solution: {}".format(sample_solution))
-        tour_length = Reward(sample_solution.detach(), self.is_cuda_available)
+        tour_length = Reward(sample_solution, self.is_cuda_available)
         
-        #dos formas para calcular el loss
         
-        # nll = 0 # negative log likelihood
-        probs_sample_solution = torch.max(align_score, dim=2)[0]
-        
-        log_probs = torch.log(probs_sample_solution.sum(dim=1))
-        nll = -1*torch.log(probs_sample_solution.sum(dim=1))
+        log_probs = torch.log(sample_probs.sum(dim=1))
+        nll = -1*torch.log(sample_probs.sum(dim=1))
         # for i in align_score.shape[0]:
             
         #     prob = probs_sample_solution[i]
@@ -340,10 +338,10 @@ class NeuronalOptm:
 
 if __name__ == "__main__":
     
-    train_filename="./CH_TSP_data/tsp_all_len20.txt" 
-    val_filename = "./CH_TSP_data/tsp_20_test.txt"
+    train_filename="./CH_TSP_data/tsp5.txt" 
+    val_filename = "./CH_TSP_data/tsp5_test.txt"
 
-    seq_len = 50
+    seq_len = 5
     num_layers = 1 # Se procesa con sola una celula por coordenada.
     encoder_input_size = 2 
     rnn_hidden_size = 32
@@ -354,8 +352,8 @@ if __name__ == "__main__":
     process_block_iter = 1
     inp_len_seq = seq_len
     lr = 1e-3
-    
-    save_model_file="RLPointerModel_TSP20.pt"
+    C = 5
+    save_model_file="RLPointerModel_TSP5.pt"
     
     train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
     eval_ds = TSPDataset(val_filename, seq_len, lineCountLimit=100)
@@ -365,7 +363,7 @@ if __name__ == "__main__":
     
     trainer = NeuronalOptm(rnn_type, bidirectional, num_layers, encoder_input_size, 
                            rnn_hidden_size, embedding_dim_critic, hidden_dim_critic,
-                           process_block_iter, inp_len_seq, lr)
+                           process_block_iter, inp_len_seq, lr, C=C)
     
     Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
                                                                                      save_model_file=save_model_file)

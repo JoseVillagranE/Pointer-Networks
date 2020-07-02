@@ -13,11 +13,11 @@ class PointerNetRNNDecoder(RNNDecoderBase):
     """ Pointer network RNN Decoder, process all the output together
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, attn_type):
+        input_size, hidden_size, dropout, batch_size, attn_type, C=None):
         super(PointerNetRNNDecoder, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         #    self.attention = Attention("dot", hidden_size)
-        self.attention = Attention(attn_type, hidden_size)
+        self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
     
     def forward(self, tgt, memory_bank, hidden, memory_lengths=None):
         # RNN
@@ -35,12 +35,12 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
 
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, attn_type, n_glimpses=1):
+        input_size, hidden_size, dropout, batch_size, attn_type, C=None, n_glimpses=1):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         
-        self.attention = Attention(attn_type, hidden_size)
-        self.glimpse = Attention(attn_type, hidden_size)
+        self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
+        self.glimpse = Attention(attn_type, hidden_size, batch_size, C=C)
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         
@@ -74,7 +74,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             
 
             attn_h, align_score = self.attention(memory_bank, rnn_outp, memory_lengths) # align_score -> [batch_size, #nodes]
-            align_score = align_score.squeeze()
+            align_score = self.sm(align_score.squeeze())
             idxs = align_score.multinomial(num_samples=1).squeeze()
             for old_idxs in selections:
                 if old_idxs.eq(idxs).data.any():
@@ -101,16 +101,16 @@ class PointerNet(nn.Module):
     dropout : dropout rate
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
-        encoder_input_size, rnn_hidden_size, dropout, attn_type="dot"):
+        encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="dot", C=None):
         super().__init__()
         self.encoder = RNNEncoder(rnn_type, bidirectional,
         num_layers, encoder_input_size, rnn_hidden_size, dropout)
         if attn_type in ['dot', 'general']:
             self.decoder = PointerNetRNNDecoder(rnn_type, bidirectional,
-                                    num_layers, encoder_input_size, rnn_hidden_size, dropout, attn_type=attn_type)
+                                    num_layers, encoder_input_size, rnn_hidden_size, dropout,batch_size, attn_type=attn_type, C=C)
         else:
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
-                                    num_layers, encoder_input_size, rnn_hidden_size, dropout, attn_type=attn_type)
+                                    num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type=attn_type, C=C)
                 
       
     def forward(self, inp, inp_len, outp, outp_len):

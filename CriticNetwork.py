@@ -36,7 +36,7 @@ def GlimpseFunction(ref, attn_prob):
 class CriticNetwork(nn.Module):
     
     def __init__(self, rnn_type, num_layers, bidirectional, embedding_dim, hidden_dim, 
-                 process_block_iter, dropout=0.0, is_cuda_available=False):
+                 process_block_iter, batch_size, dropout=0.0, C=None, is_cuda_available=False):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
@@ -45,7 +45,7 @@ class CriticNetwork(nn.Module):
         
         self.encoder = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
                                   hidden_dim, dropout)
-        self.process_block = Attention("RL", hidden_dim)
+        self.process_block = Attention("RL", hidden_dim, batch_size, C=C)
         self.decoder = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
                                      nn.Linear(hidden_dim, 1))
         
