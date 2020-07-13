@@ -5,6 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
+from torch.autograd import Variable
 
 def rnn_factory(rnn_type, **kwargs):
   pack_padded_seq = True
@@ -52,6 +53,9 @@ class RNNEncoder(EncoderBase):
       num_layers=num_layers,
       dropout=dropout)
     self.use_bridge = use_bridge
+    
+    self.enc_init_state = self.init_hidden(hidden_size)
+    
     if self.use_bridge:
       raise NotImplementedError()
   
@@ -71,3 +75,12 @@ class RNNEncoder(EncoderBase):
     if self.use_bridge:
       raise NotImplementedError()
     return memory_bank, hidden_final
+
+  def init_hidden(self, hidden_dim):
+        """Trainable initial hidden state"""
+        enc_init_hx = Variable(torch.zeros(hidden_dim), requires_grad=False)
+        enc_init_cx = Variable(torch.zeros(hidden_dim), requires_grad=False)
+        if torch.cuda.is_available():
+            enc_init_cx = enc_init_cx.cuda()
+            enc_init_hx = enc_init_hx.cuda()
+        return (enc_init_hx, enc_init_cx)  

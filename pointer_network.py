@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 from layers.seq2seq.encoder import RNNEncoder
 from layers.seq2seq.decoder import RNNDecoderBase
-from layers.attention import Attention, sequence_mask
+from layers.attention import Attention
 
 import numpy as np
 class PointerNetRNNDecoder(RNNDecoderBase):
@@ -19,13 +19,13 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         #    self.attention = Attention("dot", hidden_size)
         self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
     
-    def forward(self, tgt, memory_bank, hidden, memory_lengths=None):
+    def forward(self, tgt, memory_bank, hidden):
         # RNN
         rnn_output, hidden_final = self.rnn(tgt, hidden)
         # Attention
         memory_bank = memory_bank.transpose(0, 1)
         rnn_output = rnn_output.transpose(0, 1)
-        attn_h, align_score = self.attention(memory_bank, rnn_output, memory_lengths)
+        attn_h, align_score = self.attention(memory_bank, rnn_output)
         
         return align_score, rnn_output
     
@@ -44,7 +44,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         
-    def forward(self, dec_inp_b, inp, memory_bank, hidden, memory_lengths=None):
+    def forward(self, dec_inp_b, inp, memory_bank, hidden):
         
         """
         
@@ -60,7 +60,9 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         """
         selections = []#np.zeros((dec_inp_b.shape[1], inp.shape[0]))
         align_scores = []
-        dec_inp = dec_inp_b[0, :, :].unsqueeze(0) # [1, batch_size, 2]. idx=0 -> token
+        mask = None
+        idxs = None
+        dec_inp = dec_inp_b.unsqueeze(0) # [1, batch_size, 2]. idx=0 -> token
         for i in range(inp.shape[0]):
             rnn_outp, hidden_final = self.rnn(dec_inp, hidden)
             hidden = hidden_final
@@ -68,13 +70,13 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
                 memory_bank = memory_bank.transpose(0, 1) #[batch_size, emb_size, hidden_size]
             rnn_outp = rnn_outp.transpose(0, 1)# [batch_size, 1, hidden_size]
             for _ in range(self.n_glimpses):
-                attn_h, align_score = self.glimpse(memory_bank, rnn_outp)
+                attn_h, align_score, mask = self.glimpse(memory_bank, rnn_outp, mask, idxs)
                 attn_h = attn_h.transpose(1, 2)
                 rnn_outp = torch.bmm(self.sm(align_score), attn_h)
             
 
-            attn_h, align_score = self.attention(memory_bank, rnn_outp, memory_lengths) # align_score -> [batch_size, #nodes]
-            align_score = self.sm(align_score.squeeze())
+            attn_h, align_score, mask = self.attention(memory_bank, rnn_outp, mask, idxs) # align_score -> [batch_size, #nodes]
+            align_score = align_score.squeeze()
             idxs = align_score.multinomial(num_samples=1).squeeze()
             for old_idxs in selections:
                 if old_idxs.eq(idxs).data.any():
@@ -82,11 +84,9 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
                     break
             selections.append(idxs)
             align_scores.append(align_score)
-            dec_inp = inp[idxs.data, [j for j in range(dec_inp_b.shape[1])],:].unsqueeze(0)
-
+            dec_inp = inp[idxs.data, [j for j in range(dec_inp_b.shape[0])],:].unsqueeze(0)
         selections = torch.stack(selections).transpose(0, 1)
         align_scores = torch.stack(align_scores).transpose(0, 1)
-        
         return align_scores, selections, hidden
         
             
@@ -115,9 +115,17 @@ class PointerNet(nn.Module):
       
     def forward(self, inp, inp_len, outp, outp_len):
         inp = inp.transpose(0, 1)
-        outp = outp.transpose(0, 1)
-        memory_bank, hidden_final = self.encoder(inp, inp_len)
-        align_score, idxs, dec_memory_bank  = self.decoder(outp, inp, memory_bank, hidden_final, inp_len)
+        # outp = outp.transpose(0, 1)
+        
+        (encoder_hx, encoder_cx) = self.encoder.enc_init_state
+        encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
+        encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
+        
+        memory_bank, hidden_final = self.encoder(inp, inp_len, (encoder_hx, encoder_cx))
+        
+        dec_init_state = (hidden_final[0][-1].unsqueeze(0), hidden_final[1][-1].unsqueeze(0))
+        
+        align_score, idxs, dec_memory_bank  = self.decoder(outp, inp, memory_bank, dec_init_state)
         return align_score, memory_bank, dec_memory_bank, idxs
 
 class PointerNetLoss(nn.Module):

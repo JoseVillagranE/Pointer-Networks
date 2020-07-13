@@ -16,7 +16,7 @@ import numpy as np
 
 from layers.seq2seq.encoder import RNNEncoder
 from layers.seq2seq.decoder import RNNDecoderBase
-from layers.attention import Attention, sequence_mask
+from layers.attention import Attention
 from torch import optim
 
 def GlimpseFunction(ref, attn_prob):
@@ -73,11 +73,17 @@ class CriticNetwork(nn.Module):
         
         '''
         inp = inp.transpose(0, 1)
-        memory_bank, (hidden, c_n) = self.encoder(inp, inp_len)
+        
+        (encoder_hx, encoder_cx) = self.encoder.enc_init_state
+        encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
+        encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
+        
+        memory_bank, (hidden, c_n) = self.encoder(inp, inp_len, (encoder_hx, encoder_cx))
         memory_bank = memory_bank.transpose(0, 1) # [batch_size, emb_size, emb_size]
         hidden = hidden.transpose(0, 1) # [batch_size, 1, hidden_size]
+        # hidden = hidden[-1]
         for i in range(self.process_block_iter):
-            attn_h, align_score = self.process_block(memory_bank, hidden) # modifica las dimensiones de la matriz. Se debe verificar
+            attn_h, align_score, _ = self.process_block(memory_bank, hidden, None, None, "Glimpse") # modifica las dimensiones de la matriz. Se debe verificar
             hidden = GlimpseFunction(attn_h, align_score)
         
         outp = self.decoder(hidden)
