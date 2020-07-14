@@ -54,7 +54,7 @@ class TSPDataset(Dataset):
                 
                 #inp = self.START + inp
                 #inp_len += 1
-                assert self.seq_len + 1 >= inp_len
+                # assert self.seq_len + 1 >= inp_len
                 # for i in range(self.seq_len + 1 - inp_len):
                 #     inp += self.END
                 

@@ -48,7 +48,7 @@ class Attention(nn.Module):
         if self.attn_type == "RL":
             self.W_ref = nn.Linear(dim, dim, bias=False)
             self.W_q = nn.Linear(dim, dim, bias=False)
-            self.v = torch.FloatTensor(torch.ones((bz_size, 1, 5))).cuda()
+            self.v = torch.FloatTensor(torch.ones((bz_size, 1, 20))).cuda()
             # self.v = self.v.unsqueeze(0).expand(bz_size, len(self.v)).unsqueeze(1)
         elif self.attn_type == "general":
             self.linear = nn.Linear(dim, dim, bias=False)
@@ -85,7 +85,6 @@ class Attention(nn.Module):
                 else:
                     return u
             else:
-                print("caca")
                 u = self.tanh(torch.bmm(tgt_, src_))
                 return u
   

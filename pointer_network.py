@@ -111,7 +111,7 @@ class PointerNet(nn.Module):
         else:
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type=attn_type, C=C)
-                
+         
       
     def forward(self, inp, inp_len, outp, outp_len):
         inp = inp.transpose(0, 1)
