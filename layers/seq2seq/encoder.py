@@ -45,7 +45,7 @@ class RNNEncoder(EncoderBase):
     super(RNNEncoder, self).__init__()
     if bidirectional:
       assert hidden_size % 2 == 0
-      hidden_size = hidden_size // 2
+      # hidden_size = hidden_size // 2
     self.rnn, self.pack_padded_seq = rnn_factory(rnn_type,
       input_size=input_size,
       hidden_size=hidden_size,

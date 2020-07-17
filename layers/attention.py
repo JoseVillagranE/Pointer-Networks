@@ -4,6 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
+import math
 
 def apply_mask(align_score, mask, prev_idxs):
     """ apply mask for shutdown previous indexs that already chose
@@ -22,14 +23,8 @@ def apply_mask(align_score, mask, prev_idxs):
     mask_ = mask.clone()
     if prev_idxs is not None:
         mask_[[x for x in range(align_score.size(0))],:, prev_idxs] = 1
-        # align_score.data.masked_fill_(mask_, -float('inf'))
         align_score[mask_] = -np.inf
     return align_score, mask_
-# return (torch.arange(0, max_len)
-#       .type_as(lengths)
-#       .repeat(bz, 1)
-#       .lt(lengths))
-
 class Attention(nn.Module):
     """ Attention layer
     Args:
@@ -48,8 +43,11 @@ class Attention(nn.Module):
         if self.attn_type == "RL":
             self.W_ref = nn.Linear(dim, dim, bias=False)
             self.W_q = nn.Linear(dim, dim, bias=False)
-            self.v = torch.FloatTensor(torch.ones((bz_size, 1, 20))).cuda()
-            # self.v = self.v.unsqueeze(0).expand(bz_size, len(self.v)).unsqueeze(1)
+            v = torch.FloatTensor(dim)
+            if torch.cuda.is_available():
+                v = v.cuda()
+            self.v = nn.Parameter(v)
+            self.v.data.uniform_(-(1. / math.sqrt(dim)) , 1. / math.sqrt(dim))
         elif self.attn_type == "general":
             self.linear = nn.Linear(dim, dim, bias=False)
         elif self.attn_type == "dot":
@@ -72,21 +70,23 @@ class Attention(nn.Module):
             if self.attn_type == "RL":
                 tgt_ = self.W_q(tgt_)
                 src_ = self.W_ref(src)
+                
+                tgt_ = tgt_.repeat(1, src_.size(1), 1)
             elif self.attn_type == "general":
                 tgt_ = self.linear(tgt_)
-            src_ = src_.transpose(1, 2)
+            # src_ = src_.transpose(1, 2)
             
             if self.attn_type in ["general", "dot"]:
                 return torch.bmm(tgt_, src_)
             elif self.attn_type=="RL":#type(self.v)=='torch.Tensor':
-                u = self.v*self.tanh(torch.bmm(tgt_, src_))
+                
+                v = self.v.unsqueeze(0).expand(tgt_.size(0), len(self.v)).unsqueeze(1)
+                
+                u = torch.bmm(v,self.tanh(tgt_ + src_).transpose(1, 2))
                 if self.C:
                     return self.C*self.tanh(u)
                 else:
                     return u
-            else:
-                u = self.tanh(torch.bmm(tgt_, src_))
-                return u
   
     def forward(self, src, tgt, mask, prev_idxs, attention_type="Attention"):
         """
@@ -101,16 +101,10 @@ class Attention(nn.Module):
         else:
             one_step = False
       
-        # bz, src_len, dim = src.size()
-        # _, tgt_len, _ = tgt.size()
-    
         align_score = self.score(src, tgt)
       
         if attention_type=="Attention":
             align_score, mask = apply_mask(align_score, mask, prev_idxs)
-        # mask = sequence_mask(mask, src_lengths)
-        # mask = mask.unsqueeze(1)
-        # align_score.data.masked_fill_(~mask, -float('inf'))
         # Normalize weights
         logits = F.softmax(align_score.squeeze(), -1)
         

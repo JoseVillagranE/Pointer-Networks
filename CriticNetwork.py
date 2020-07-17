@@ -83,7 +83,7 @@ class CriticNetwork(nn.Module):
         hidden = hidden.transpose(0, 1) # [batch_size, 1, hidden_size]
         # hidden = hidden[-1]
         for i in range(self.process_block_iter):
-            attn_h, align_score, _ = self.process_block(memory_bank, hidden, None, None, "Glimpse") # modifica las dimensiones de la matriz. Se debe verificar
+            attn_h, align_score, _ = self.process_block(memory_bank, hidden, None, None) # modifica las dimensiones de la matriz. Se debe verificar
             hidden = GlimpseFunction(attn_h, align_score)
         
         outp = self.decoder(hidden)

@@ -22,7 +22,7 @@ class RNNDecoderBase(nn.Module):
     super().__init__()
     if bidirectional:
       assert hidden_size % 2 == 0
-      hidden_size = hidden_size // 2
+      # hidden_size = hidden_size // 2
     self.rnn, _ = rnn_factory(rnn_type,
       input_size=input_size,
       hidden_size=hidden_size,
