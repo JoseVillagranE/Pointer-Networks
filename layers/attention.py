@@ -108,7 +108,8 @@ class Attention(nn.Module):
         # Normalize weights
         logits = F.softmax(align_score.squeeze(), -1)
         
-        logits = logits.unsqueeze(2).transpose(1,2)
+        if len(logits.size())!=1:
+            logits = logits.unsqueeze(2).transpose(1,2)
           
         attn_h = 0
         if self.attn_type in ["general", "dot"]:

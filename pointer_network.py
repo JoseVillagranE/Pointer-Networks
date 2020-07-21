@@ -69,10 +69,18 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             if i == 0:
                 memory_bank = memory_bank.transpose(0, 1) #[batch_size, emb_size, hidden_size]
             rnn_outp = rnn_outp.transpose(0, 1)# [batch_size, 1, hidden_size]
-            for _ in range(self.n_glimpses):
+            for j in range(self.n_glimpses):
                 attn_h, align_score, mask = self.glimpse(memory_bank, rnn_outp, mask, idxs)
                 attn_h = attn_h.transpose(1, 2)
-                rnn_outp = torch.bmm(self.sm(align_score), attn_h)
+                if len(align_score.size())==1:
+                    sm = self.sm(align_score).unsqueeze(0).unsqueeze(2)
+                    rnn_outp = torch.bmm(self.sm(align_score).unsqueeze(0).unsqueeze(1), attn_h)
+                    rnn_outp = rnn_outp.transpose(1, 2)
+                    
+                    if j == self.n_glimpses - 1:
+                        rnn_outp = rnn_outp.transpose(1, 2)
+                else:
+                    rnn_outp = torch.bmm(self.sm(align_score), attn_h)
             
 
             attn_h, align_score, mask = self.attention(memory_bank, rnn_outp, mask, idxs) # align_score -> [batch_size, #nodes]
@@ -85,8 +93,13 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             selections.append(idxs)
             align_scores.append(align_score)
             dec_inp = inp[idxs.data, [j for j in range(dec_inp_b.shape[0])],:].unsqueeze(0)
-        selections = torch.stack(selections).transpose(0, 1)
-        align_scores = torch.stack(align_scores).transpose(0, 1)
+        
+        if inp.shape[0]:
+            selections = torch.stack(selections)
+            align_scores = torch.stack(align_scores)
+        else:
+            selections = torch.stack(selections).transpose(0, 1)
+            align_scores = torch.stack(align_scores).transpose(0, 1)
         return align_scores, selections, hidden
         
             
