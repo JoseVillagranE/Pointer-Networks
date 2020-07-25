@@ -100,6 +100,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         else:
             selections = torch.stack(selections).transpose(0, 1)
             align_scores = torch.stack(align_scores).transpose(0, 1)
+
         return align_scores, selections, hidden
         
             
@@ -123,7 +124,7 @@ class PointerNet(nn.Module):
                                     num_layers, encoder_input_size, rnn_hidden_size, dropout,batch_size, attn_type=attn_type, C=C)
         else:
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
-                                    num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type=attn_type, C=C)
+                                    num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="RL", C=C)
          
       
     def forward(self, inp, inp_len, outp, outp_len):

@@ -46,6 +46,9 @@ class Attention(nn.Module):
             v = torch.FloatTensor(dim)
             if torch.cuda.is_available():
                 v = v.cuda()
+                self.W_ref = self.W_ref.cuda()
+                self.W_q = self.W_q.cuda()
+                self.conv_proj = self.conv_proj.cuda()
             self.v = nn.Parameter(v)
             self.v.data.uniform_(-(1. / math.sqrt(dim)) , 1. / math.sqrt(dim))
         elif self.attn_type == "general":

@@ -45,7 +45,10 @@ class CriticNetwork(nn.Module):
         
         self.encoder = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
                                   hidden_dim, dropout)
-        self.process_block = Attention("RL", hidden_dim, batch_size, C=C)
+        # self.process_block = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
+        #                           hidden_dim, dropout)
+        self.process_block = nn.LSTM(embedding_dim, hidden_dim, batch_first = True)
+        self.attending = Attention("RL", hidden_dim, batch_size, C=C)
         self.decoder = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
                                      nn.Linear(hidden_dim, 1))
         
@@ -80,12 +83,17 @@ class CriticNetwork(nn.Module):
         
         memory_bank, (hidden, c_n) = self.encoder(inp, inp_len, (encoder_hx, encoder_cx))
         memory_bank = memory_bank.transpose(0, 1) # [batch_size, emb_size, emb_size]
-        hidden = hidden.transpose(0, 1) # [batch_size, 1, hidden_size]
+        # hidden = hidden.transpose(0, 1) # [batch_size, 1, hidden_size]
         # hidden = hidden[-1]
-        for i in range(self.process_block_iter):
-            attn_h, align_score, _ = self.process_block(memory_bank, hidden, None, None) # modifica las dimensiones de la matriz. Se debe verificar
-            hidden = GlimpseFunction(attn_h, align_score)
+        dec_i1 = torch.rand(hidden.shape[1], 1, hidden.shape[2])
         
+        if torch.cuda.is_available():
+            dec_i1 = dec_i1.cuda()
+        
+        for i in range(self.process_block_iter):
+            memory_bank_pr, (hidden, c_n) = self.process_block(dec_i1, (hidden, c_n))
+            attn_h, align_score, _ = self.attending(memory_bank, memory_bank_pr, None, None)
+            dec_i1 = GlimpseFunction(attn_h, align_score)
         outp = self.decoder(hidden)
         
         return outp
