@@ -19,6 +19,8 @@ from time import time
 
 from TSPDataset import TSPDataset
 from pointer_network import PointerNet, PointerNetLoss
+import warnings
+warnings.filterwarnings("ignore")
 
 def PreProcessOutput(outp):
     
@@ -57,7 +59,6 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
         b_eval_outp_out = b_eval_outp_out.squeeze()
         idxs = PreProcessOutput(idxs)
         labels = PreProcessOutput(b_eval_outp_out)
-        
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
             countAcc += 1
     
@@ -83,6 +84,13 @@ def plot_one_tour(model, example, cudaAvailable):
     plt.plot(inp[:,0], inp[:,1], 'o')
     for i in range(idxs.shape[0]-1):
         plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
+        
+
+def eval_tour_len_and_acc(align_score):
+    idxs = np.argmax(align_score, axis=1)
+    print(idxs)
+    # idxs = PreProcessOutput(idxs)
+    
     
 def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_size=128, beam_width=2, lr=1e-3, clip_norm=5.0,
              weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5):
@@ -125,8 +133,10 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
       
       optimizer.zero_grad()
       align_score = model(b_inp, b_inp_len, b_outp_in, b_outp_len)
+      b_outp_len = b_outp_len.squeeze(-1)
       loss = criterion(b_outp_out, align_score, b_outp_len)
-
+      
+      # eval_tour_len_and_acc(align_score.detach().cpu().numpy())
       l = loss.item()
       total_loss += l
       batch_cnt += 1
@@ -155,7 +165,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
                 b_eval_outp_len = b_eval_outp_len.cuda()
             
             align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
-            loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len)
+            loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len.squeeze(-1))
             l = loss.item()
             total_loss_eval += l
             batch_cnt += 1
@@ -170,28 +180,38 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
 
 if __name__ == "__main__":
     
-    train_filename="./data/tsp5.txt" 
-    val_filename = "./data/tsp5_test.txt"
+    train_filename="./CH_TSP_data/tsp5.txt" 
+    val_filename = "./CH_TSP_data/tsp5_test.txt"
     cudaAvailable = torch.cuda.is_available()
     
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
     rnn_hidden_size = 32
-    save_model_name = "PointerModel.pt"
-    model = PointerNet("LSTM", True, num_layers, encoder_input_size, rnn_hidden_size, 0.0)
+    save_model_name = "PointerModel_Sup_5.pt"
+    batch_size = 10000
+    bidirectional = False
+    rnn_type = "LSTM"
+    embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
+    attn_type = "Sup"
+    C = None
+    training_type = "Sup"
+    nepoch = 20
     
-    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
-    eval_ds = TSPDataset(val_filename, seq_len, lineCountLimit=-1)
+    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
+    
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
+    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo "TSPModel.pt"
-    # model.load_state_dict(torch.load("TSPModel.pt"))
+    # model.load_state_dict(torch.load("PointerModel_Sup_5.pt"))
     
     # Entrenamiento del modelo
-    TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=100, model_file=save_model_name)
+    TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
+                                      model_file=save_model_name, batchSize=batch_size)
     # Evaluación del modelo en un conjunto de evaluación
     eval_model(model, eval_ds, cudaAvailable)
 

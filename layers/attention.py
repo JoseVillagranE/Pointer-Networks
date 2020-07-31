@@ -33,96 +33,54 @@ class Attention(nn.Module):
     """
     def __init__(self, attn_type, dim, bz_size, C=None):
         super().__init__()
-        self.attn_type = attn_type
         self.C = C
         self.tanh = nn.Tanh()
-        bias_out = attn_type == "mlp"
-        self.linear_out = nn.Linear(dim *2, dim, bias_out)
         self.conv_proj = nn.Conv1d(dim, dim, 1 , 1)
-        self.v = 0
-        if self.attn_type == "RL":
-            self.W_ref = nn.Linear(dim, dim, bias=False)
-            self.W_q = nn.Linear(dim, dim, bias=False)
-            v = torch.FloatTensor(dim)
-            if torch.cuda.is_available():
-                v = v.cuda()
-                self.W_ref = self.W_ref.cuda()
-                self.W_q = self.W_q.cuda()
-                self.conv_proj = self.conv_proj.cuda()
-            self.v = nn.Parameter(v)
-            self.v.data.uniform_(-(1. / math.sqrt(dim)) , 1. / math.sqrt(dim))
-        elif self.attn_type == "general":
-            self.linear = nn.Linear(dim, dim, bias=False)
-        elif self.attn_type == "dot":
-            pass
-        else:
-            raise NotImplementedError()
-  
-    def score(self, src, tgt):
-        """ Attention score calculation
-        Args:
-        src : source values (bz, src_len, dim)
-        tgt : target values (bz, tgt_len, dim)
-          """
-        # bz, src_len, dim = src.size()
-        # _, tgt_len, _ = tgt.size()
+        self.W_ref = nn.Linear(dim, dim, bias=False) # En el paper es matriz. Revisar!
+        self.W_q = nn.Linear(dim, dim, bias=False)
+        self.v = torch.FloatTensor(dim)
+        if torch.cuda.is_available():
+            self.W_ref = self.W_ref.cuda()
+            self.W_q = self.W_q.cuda()
+            self.conv_proj = self.conv_proj.cuda()
+            self.v = self.v.cuda()
         
-        if self.attn_type in ["general", "dot", "RL"]:
-            tgt_ = tgt
-            src_ = src
-            if self.attn_type == "RL":
-                tgt_ = self.W_q(tgt_)
-                src_ = self.W_ref(src)
-                
-                tgt_ = tgt_.repeat(1, src_.size(1), 1)
-            elif self.attn_type == "general":
-                tgt_ = self.linear(tgt_)
-            # src_ = src_.transpose(1, 2)
-            
-            if self.attn_type in ["general", "dot"]:
-                return torch.bmm(tgt_, src_)
-            elif self.attn_type=="RL":#type(self.v)=='torch.Tensor':
-                
-                v = self.v.unsqueeze(0).expand(tgt_.size(0), len(self.v)).unsqueeze(1)
-                
-                u = torch.bmm(v,self.tanh(tgt_ + src_).transpose(1, 2))
-                if self.C:
-                    return self.C*self.tanh(u)
-                else:
-                    return u
-  
-    def forward(self, src, tgt, mask, prev_idxs, attention_type="Attention"):
+        self.v.data.uniform_(0, 1)
+        self.v = nn.Parameter(self.v)
+    def forward(self, src, tgt, mask=None, prev_idxs=None, training_type = "RL", attention_type="Attention"):
         """
         Args:
-        src : source values (bz, src_len, dim). enc_i or ref in Bello's Paper
-        tgt : target values (bz, tgt_len, dim). dec_i or q
+        src : source values (bz, src_len, hidden_dim). enc_i or ref in Bello's Paper
+        
+        tgt : target values (bz, 1, hidden_dim). dec_i or q
         src_lengths : source values length
         """
-        if tgt.dim() == 2:
-            one_step = True
-            src = src.unsqueeze(1)
-        else:
-            one_step = False
-      
-        align_score = self.score(src, tgt)
-      
-        if attention_type=="Attention":
-            align_score, mask = apply_mask(align_score, mask, prev_idxs)
-        # Normalize weights
-        logits = F.softmax(align_score.squeeze(), -1)
         
-        if len(logits.size())!=1:
-            logits = logits.unsqueeze(2).transpose(1,2)
-          
-        attn_h = 0
-        if self.attn_type in ["general", "dot"]:
-            c = torch.bmm(logits, src)
-            concat_c = torch.cat([c, tgt], -1)
-            attn_h = self.linear_out(concat_c)
-        if one_step:
-            attn_h = attn_h.squeeze(1)
-            logits = logits.squeeze(1)
+        
+        v = self.v.unsqueeze(0).expand(src.size(0), len(self.v)).unsqueeze(1)
+        # [batch, 1, hidden_dim] x [batch, hidden, seq_len]
+        u = torch.bmm(v,self.tanh(self.W_q(tgt) + self.W_ref(src)).transpose(1, 2))#.transpose(1, 2)
+        if self.C:
+            logit = self.C*self.tanh(u)
         else:
-            src = src.transpose(1, 2)
-            attn_h = self.conv_proj(src)
-        return attn_h, logits, mask # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]
+            logit = u
+        
+        if attention_type == Attention and training_type == "RL": 
+            logit, mask = apply_mask(logit, mask, prev_idxs)
+        # Normalize weights
+        probs = F.softmax(logit, -1)
+        
+        if len(probs.size())!=1:
+            probs = probs.transpose(1,2)
+          
+        if training_type == "Sup":
+            # probs = probs.transpose(1,2)
+            d = probs*src # pointer network paper
+            d = d.sum(1)
+            # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
+            concat_d = (d.unsqueeze(0), tgt.transpose(0, 1))
+        # if one_step:
+        #     attn_h = attn_h.squeeze(1)
+        #     probs = probs.squeeze(1)
+        # else:
+        return concat_d, probs, mask # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]

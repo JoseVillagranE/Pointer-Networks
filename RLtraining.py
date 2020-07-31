@@ -188,7 +188,7 @@ class NeuronalOptm:
         
         self.dec_0 = nn.Parameter(dec_0)
         # self.embedding = nn.Parameter(embedding)
-        self.embedding = nn.Linear(2, 128, bias=False)
+        self.embedding = nn.Linear(input_lenght, embedding_dim, bias=False)
         
         # self.dec_0.data.uniform_(-(1. / math.sqrt(self.embedding_dim)), 1. / math.sqrt(self.embedding_dim))
         # self.embedding.data.uniform_(-(1. / math.sqrt(self.embedding_dim)), 1. / math.sqrt(self.embedding_dim))
@@ -202,7 +202,7 @@ class NeuronalOptm:
         self.critic = CriticNetwork(rnn_type, num_layers, bidirectional, embedding_dim,
                                     hidden_dim_critic, process_block_iter, batch_size, C=C, is_cuda_available=self.is_cuda_available)
         
-        # self.critic.apply(weights_init)
+        self.critic.apply(weights_init)
         
         self.optim_critic = optim.Adam(self.critic.parameters(), lr=lr)
         self.critic_loss = torch.nn.MSELoss()
@@ -225,30 +225,14 @@ class NeuronalOptm:
         # De momento se obtiene el largo del batch de etiquetas desde el dataset. Esta mal, pero es para no
         # perder tiempo
         
-        self.dec_0.data.uniform_(-(1. / math.sqrt(self.embedding_dim)), 1. / math.sqrt(self.embedding_dim))
-        # self.embedding.data.uniform_(-(1. / math.sqrt(self.embedding_dim)), 1. / math.sqrt(self.embedding_dim))
-        self.dec_0_i = self.dec_0.unsqueeze(0).repeat(self.batch_size, 1)
-        # self.embedding_i = self.embedding.unsqueeze(0).repeat(self.batch_size, 1, 1)
-        
-
-                    # embedded_inputs = []
-        # # result is [batch_size, 1, seq_len, inp_dim] 
-        # ips = batch_inp.unsqueeze(1)
-        
-        # for i in range(self.seq_len):
-        #     # [batch_size x 1 x input_dim] * [batch_size x input_dim x embedding_dim]
-        #     # result is [batch_size, embedding_dim]
-        #     embedded_inputs.append(torch.bmm(
-        #         ips[:, :, i, :].float(),
-        #         self.embedding_i).squeeze(1))
-        
+        self.dec_0.data.uniform_(0, 1)
+        self.dec_0_i = self.dec_0.unsqueeze(0).repeat(self.batch_size, 1)        
         embedded_inputs = Variable(self.embedding(batch_inp))
         
-        # Result is [ batch_size x sourceL x embedding_dim]
-        # embedded_inputs = Variable(torch.cat(embedded_inputs).view(self.batch_size, self.seq_len,
-        #                                             self.embedding_dim), requires_grad=False)   
+        # Result is [ batch_size x sourceL x embedding_dim]  
         # Output of actor net
         align_score, memory_bank, dec_memory_bank, idxs = self.model(embedded_inputs, batch_inp_len, self.dec_0_i, batch_outp_len)
+        
         # cnt=0
         # for param in self.model.parameters():
         #     if cnt==0:
@@ -263,41 +247,37 @@ class NeuronalOptm:
         sample_probs = tensor_sort(align_score, idxs, axis=2)
         # print("sample_solution: {}".format(sample_solution))
         tour_length = Reward(sample_solution, self.is_cuda_available)
-        
         log_probs = torch.log(sample_probs.sum(dim=1))
         # log_probs = log_probs.sum(dim=0).squeeze()
         nll = -1*log_probs     
         
-        # # En caso que hayan nan's
+        # # # En caso que hayan nan's
         # nll[(nll != nll).detach()] = 0.
-        # # no forzar el gradiente a grandes números
-        log_probs[(log_probs < -1000).detach()] = 0.
+        # # # no forzar el gradiente a grandes números
+        # log_probs[(log_probs < -1000).detach()] = 0.
         
-        # print(tour_length)
-        # print(baseline)
-        
-        actor_loss = (tour_length - baseline.detach())*log_probs
+        adv = tour_length - baseline.detach()
+        actor_loss = adv*log_probs
         
         actor_loss = actor_loss.mean()
-        
         self.optimizer.zero_grad()
         actor_loss.backward()
-        actor_loss_item = actor_loss.item()
         clip_grad_norm_(self.model.parameters(), clip_norm)
         
         
         self.optim_critic.zero_grad()
         critic_loss = self.critic_loss(tour_length.detach(), baseline)
-        critic_loss.backward()
-        critic_loss_item = critic_loss.item()
-        clip_grad_norm_(self.critic.parameters(), clip_norm)
+        # critic_loss.backward()
+        # clip_grad_norm_(self.critic.parameters(), clip_norm)
         
         self.optimizer.step()
-        self.optim_critic.step()
+        # self.optim_critic.step()
         self.actor_lr_sch.step()
-        self.critic_lr_sch.step()
+        # self.critic_lr_sch.step()
         
-        tour_length_mean = tour_length.mean()
+        actor_loss_item = actor_loss.detach().item()
+        critic_loss_item = critic_loss.detach().item()
+        tour_length_mean = tour_length.detach().mean()
         return actor_loss_item, critic_loss_item, tour_length_mean
     
     def training(self, train_ds, eval_ds, attention_size=128, beam_width=2,
@@ -421,23 +401,23 @@ if __name__ == "__main__":
     seq_len = 20
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
-    rnn_hidden_size = 128
+    rnn_hidden_size = 256
     rnn_type = 'LSTM'
     bidirectional = False
     hidden_dim_critic = rnn_hidden_size
-    process_block_iter = 2
+    process_block_iter = 3
     inp_len_seq = seq_len
     lr = 1e-3
-    C = 10
-    batch_size = 100
-    n_epoch = 200
+    C = 10 # Logit clipping
+    batch_size = 10000
+    n_epoch = 20
     embedding_dim = 128 #d-dimensional embedding dim
     # encoder_input_size = embedding_dim
     embedding_dim_critic = embedding_dim
     
     save_model_file="RLPointerModel_TSP20.pt"
     
-    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
+    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=-1)
     eval_ds = TSPDataset(val_filename, seq_len, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
