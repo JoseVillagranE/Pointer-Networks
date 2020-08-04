@@ -19,20 +19,24 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         #    self.attention = Attention("dot", hidden_size)
         self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
     
-    def forward(self, tgt, memory_bank, hidden):
+    def forward(self, tgt, memory_bank, hidden, inp, Mode="Train"):
         
         align_scores = []
         memory_bank = memory_bank.transpose(0, 1)
+        idx = torch.zeros((inp.size()))
         for i in range(tgt.shape[0]):
             
-            dec_i = tgt[i, :, :].unsqueeze(0)
+            if i == 0 or Mode=="train":
+                dec_i = tgt[i, :, :].unsqueeze(0)
+            elif Mode =="Eval":
+                dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:]
             dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)
             
             hidden, align_score, _ = self.attention(memory_bank, dec_outp, None, 
                                                        None, "Sup")
             
-
+            idx = align_score.argmax(dim=1)
             align_scores.append(align_score)
         align_scores = torch.stack(align_scores, dim=1)
         align_scores = align_scores.squeeze(-1)
@@ -139,14 +143,14 @@ class PointerNet(nn.Module):
                                     num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="RL", C=C)
          
       
-    def forward(self, inp, inp_len, outp, outp_len):
+    def forward(self, inp, inp_len, outp, outp_len, Mode='Train'):
         
         inp = inp.transpose(0, 1) # [batch, seq_len, emb_size]
         
         if self.attn_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]
             memory_bank, hidden = self.encoder(inp, inp_len)
-            align_score = self.decoder(outp, memory_bank, hidden)
+            align_score = self.decoder(outp, memory_bank, hidden, inp, Mode=Mode)
             return align_score
         elif self.attn_type == "RL":
             

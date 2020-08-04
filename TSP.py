@@ -8,6 +8,7 @@ Created on Sat Mar 28 23:52:01 2020
 import numpy as np
 import torch
 from torch import optim
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
@@ -21,6 +22,30 @@ from TSPDataset import TSPDataset
 from pointer_network import PointerNet, PointerNetLoss
 import warnings
 warnings.filterwarnings("ignore")
+
+'''
+TODO:
+    - implementar el largo del viaje como metrica a evaluar
+    - evaluar de forma visual en x viajes a modo de testing
+    - implementar un formato de evaluación supervisado
+    - Mecanismo de predicción sin label. (test time)
+'''
+
+layers_of_interest = ["Linear", "Conv1d"]
+def weights_init(module, a=-0.08, b=0.08):
+    
+    """
+    input:
+        Module -> Neural Network Module
+        a -> int. LowerBound
+        b -> int. UpperBound
+    """
+    classname = module.__class__.__name__
+    if classname in layers_of_interest:
+        nn.init.uniform_(module.weight, a=a, b=b)
+    elif classname.find("LSTM") != -1:
+        for param in module.parameters():
+            nn.init.uniform_(param.data)
 
 def PreProcessOutput(outp):
     
@@ -52,14 +77,15 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
             b_eval_outp_out = b_eval_outp_out.cuda()
             b_eval_outp_len = b_eval_outp_len.cuda()
         
-        align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
+        align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Mode="Eval")
         align_score = align_score.cpu().detach().numpy()
-        idxs = np.argmax(align_score[0], axis=1)
+        idxs = np.argmax(align_score, axis=2)
         b_eval_outp_out = b_eval_outp_out.cpu().detach().numpy()
         b_eval_outp_out = b_eval_outp_out.squeeze()
-        idxs = PreProcessOutput(idxs)
+        idxs = PreProcessOutput(idxs.squeeze(0))
         labels = PreProcessOutput(b_eval_outp_out)
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
+            # Evaluación estricta
             countAcc += 1
     
     Acc = countAcc/eval_ds.__len__()
@@ -92,7 +118,7 @@ def eval_tour_len_and_acc(align_score):
     # idxs = PreProcessOutput(idxs)
     
     
-def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_size=128, beam_width=2, lr=1e-3, clip_norm=5.0,
+def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_size=128, beam_width=2, lr=1e-3, clip_norm=2.0,
              weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5):
     
   t0 = time()
@@ -175,7 +201,11 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
   # ext. is .pt 
   torch.save(model.state_dict(), model_file)
   t1 = time()
-  print("Training of Pointer Network takes: {}".format(t1-t0))
+  
+  hours, rem = divmod(t1-t0, 3600)
+  minutes, seconds = divmod(rem, 60)
+
+  print("Training of Pointer Networks takes: {:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
   return listOfLoss, listOfLossEval
 
 if __name__ == "__main__":
@@ -200,13 +230,15 @@ if __name__ == "__main__":
     
     model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
+    weights_init(model)
+    
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=100)
     eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
-    # Descomentar si es que existe un modelo "TSPModel.pt"
+    # Descomentar si es que existe un modelo pre-entrenado.
     # model.load_state_dict(torch.load("PointerModel_Sup_5.pt"))
     
     # Entrenamiento del modelo
