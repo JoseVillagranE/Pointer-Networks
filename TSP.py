@@ -82,11 +82,19 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
         idxs = np.argmax(align_score, axis=2)
         b_eval_outp_out = b_eval_outp_out.cpu().detach().numpy()
         b_eval_outp_out = b_eval_outp_out.squeeze()
-        idxs = PreProcessOutput(idxs.squeeze(0))
+        idxs = PreProcessOutput(idxs.squeeze())
         labels = PreProcessOutput(b_eval_outp_out)
+        
+        print(idxs)
+        print(labels)
+        
+        
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
             # Evaluación estricta
             countAcc += 1
+            
+    
+    
     
     Acc = countAcc/eval_ds.__len__()
     print("The Accuracy of the model is: {}".format(Acc))
@@ -94,6 +102,8 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
 
 def plot_one_tour(model, example, cudaAvailable):
     
+    # if cudaAvailable:
+    #     model = model.cuda()
     model.eval()
     inp, inp_len, outp_in, outp_out, outp_len = example
     inp_t = Variable(torch.from_numpy(np.array([inp])))
@@ -103,6 +113,7 @@ def plot_one_tour(model, example, cudaAvailable):
     align_score = model(inp_t, inp_len, outp_in, outp_len)
     align_score = align_score[0].detach().numpy()
     idxs = np.argmax(align_score, axis=1)
+    idxs = idxs.squeeze()
     idxs = PreProcessOutput(idxs)
     
     inp = inp[1:, :]
@@ -217,9 +228,9 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 32
+    rnn_hidden_size = 64
     save_model_name = "PointerModel_Sup_5.pt"
-    batch_size = 10000
+    batch_size = 1000
     bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
@@ -227,26 +238,26 @@ if __name__ == "__main__":
     C = None
     training_type = "Sup"
     nepoch = 20
-    
+    lr = 1e-2
     model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=100)
-    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=100)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
+    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=-1)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo pre-entrenado.
-    # model.load_state_dict(torch.load("PointerModel_Sup_5.pt"))
+    model.load_state_dict(torch.load("PointerModel_Sup_5.pt"))
     
     # Entrenamiento del modelo
-    TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
-                                      model_file=save_model_name, batchSize=batch_size)
+    # TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
+    #                                   model_file=save_model_name, batchSize=batch_size, lr=lr)
     # Evaluación del modelo en un conjunto de evaluación
-    eval_model(model, eval_ds, cudaAvailable)
+    # eval_model(model, eval_ds, cudaAvailable)
 
     # Grafica un viaje de ejemplo
-    # example = eval_ds.__getitem__(0)
-    # plot_one_tour(model, example, cudaAvailable)    
+    example = eval_ds.__getitem__(0)
+    plot_one_tour(model, example, cudaAvailable)    

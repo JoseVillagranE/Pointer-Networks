@@ -37,11 +37,12 @@ class TSPDataset(Dataset):
                 inp = list(map(float, inp.strip().split(' '))) # input -> string
                 outp = list(map(int, outp.strip().split(' ')))
                 
+                
+                
                 outp_out = []
                 
                 inp_len = len(inp)
                 outp_len = len(outp)
-                
                 
                 cnt = 0
                 idxs = []
@@ -68,7 +69,13 @@ class TSPDataset(Dataset):
                 
                 
                 outp_in = np.array(outp_in).reshape([-1, 2])
+                
+                outp_out = outp_out[:-1]
+                outp_len -= 1
+                
                 outp_out = outp_out + [0] * (self.seq_len + 1 - outp_len)
+                outp_len += 1
+                
                 outp_out = np.array(outp_out)
                 outp_len = np.array([outp_len])
                 lineCount += 1

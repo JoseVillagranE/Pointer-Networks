@@ -13,11 +13,12 @@ class PointerNetRNNDecoder(RNNDecoderBase):
     """ Pointer network RNN Decoder, process all the output together
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, attn_type, C=None):
+        input_size, hidden_size, dropout, batch_size, attn_type, C=None, is_cuda_available=False):
         super(PointerNetRNNDecoder, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         #    self.attention = Attention("dot", hidden_size)
-        self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
+        self.attention = Attention(attn_type, hidden_size, batch_size, C=C, 
+                                   is_cuda_available=is_cuda_available)
     
     def forward(self, tgt, memory_bank, hidden, inp, Mode="Train"):
         
@@ -33,12 +34,11 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)
             
-            hidden, align_score, _ = self.attention(memory_bank, dec_outp, None, 
-                                                       None, "Sup")
+            hidden, align_score, _ = self.attention(memory_bank, dec_outp, training_type="Sup")
             
-            idx = align_score.argmax(dim=1)
+            idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
-        align_scores = torch.stack(align_scores, dim=1)
+        align_scores = torch.stack(align_scores, dim=2)
         align_scores = align_scores.squeeze(-1)
         return align_scores
     
@@ -130,14 +130,17 @@ class PointerNet(nn.Module):
     dropout : dropout rate
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
-        encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="Sup", C=None):
+        encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="Sup", C=None, 
+        is_cuda_available = False):
         super().__init__()
         self.encoder = RNNEncoder(rnn_type, bidirectional,num_layers, encoder_input_size,
                                   rnn_hidden_size, dropout)
         self.attn_type = attn_type
         if attn_type == "Sup":
             self.decoder = PointerNetRNNDecoder(rnn_type, bidirectional,
-                                    num_layers, encoder_input_size, rnn_hidden_size, dropout,batch_size, attn_type=attn_type, C=C)
+                                    num_layers, encoder_input_size, rnn_hidden_size,
+                                    dropout,batch_size, attn_type=attn_type, C=C,
+                                    is_cuda_available=is_cuda_available)
         elif attn_type == "RL":
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="RL", C=C)

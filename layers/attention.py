@@ -31,7 +31,7 @@ class Attention(nn.Module):
       attn_type : attention type ["dot", "general"]
       dim : hidden dimension size
     """
-    def __init__(self, attn_type, dim, bz_size, C=None):
+    def __init__(self, attn_type, dim, bz_size, C=None, is_cuda_available=False):
         super().__init__()
         self.C = C
         self.tanh = nn.Tanh()
@@ -39,7 +39,7 @@ class Attention(nn.Module):
         self.W_ref = nn.Linear(dim, dim, bias=False) # En el paper es matriz. Revisar!
         self.W_q = nn.Linear(dim, dim, bias=False)
         self.v = torch.FloatTensor(dim)
-        if torch.cuda.is_available():
+        if is_cuda_available:
             self.W_ref = self.W_ref.cuda()
             self.W_q = self.W_q.cuda()
             self.conv_proj = self.conv_proj.cuda()
@@ -68,17 +68,18 @@ class Attention(nn.Module):
         if attention_type == Attention and training_type == "RL": 
             logit, mask = apply_mask(logit, mask, prev_idxs)
         # Normalize weights
-        probs = F.softmax(logit, -1)
+        probs = F.softmax(logit, -1) # [batch, 1, seq_len]
         
-        if len(probs.size())!=1:
-            probs = probs.transpose(1,2)
+        # if len(probs.size())!=1:
+        #     probs = probs.transpose(1,2)
           
         if training_type == "Sup":
             # probs = probs.transpose(1,2)
-            d = probs*src # pointer network paper
-            d = d.sum(1)
+            # d = probs*src # pointer network paper
+            d = torch.bmm(probs, src)
+            # d = d.sum(dim=2)
             # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
-            concat_d = (d.unsqueeze(0), tgt.transpose(0, 1))
+            concat_d = (d.transpose(0, 1), tgt.transpose(0, 1))
         # if one_step:
         #     attn_h = attn_h.squeeze(1)
         #     probs = probs.squeeze(1)
