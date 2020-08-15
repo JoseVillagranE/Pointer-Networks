@@ -17,18 +17,19 @@ import matplotlib.pyplot as plt
 
 import functools
 from time import time
-
+import random
 from TSPDataset import TSPDataset
+from utils import compute_len_tour, count_valid_tours
 from pointer_network import PointerNet, PointerNetLoss
 import warnings
 warnings.filterwarnings("ignore")
 
 '''
 TODO:
-    - implementar el largo del viaje como metrica a evaluar
-    - evaluar de forma visual en x viajes a modo de testing
     - implementar un formato de evaluación supervisado
     - Mecanismo de predicción sin label. (test time)
+    
+    - Refactorizar todoooo !!
 '''
 
 layers_of_interest = ["Linear", "Conv1d"]
@@ -46,14 +47,16 @@ def weights_init(module, a=-0.08, b=0.08):
     elif classname.find("LSTM") != -1:
         for param in module.parameters():
             nn.init.uniform_(param.data)
+            
+    
 
 def PreProcessOutput(outp):
     
-    outp = np.array([outp[i] - 1 for i in range(outp.shape[0]) if outp[i] != 0])
+    outp = [outp[i] - 1 for i in range(outp.shape[0]) if outp[i] != 0]
     return outp
 
 
-def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
+def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols=1):
     model.eval()
     if cudaAvailable:
          use_cuda = True
@@ -63,6 +66,8 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
         use_cuda = False
         
     countAcc = 0
+    n_invalid_tours = 0
+    len_tours = 0
     eval_dl = DataLoader(eval_ds, num_workers=0, batch_size=batchSize)
     for b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_out, b_eval_outp_len in eval_dl:
         
@@ -77,50 +82,91 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1):
             b_eval_outp_out = b_eval_outp_out.cuda()
             b_eval_outp_len = b_eval_outp_len.cuda()
         
-        align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Mode="Eval")
+        align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Mode="Eval")
         align_score = align_score.cpu().detach().numpy()
-        idxs = np.argmax(align_score, axis=2)
+        # idxs = np.argmax(align_score, axis=2)
+        idxs = idxs.cpu().numpy()
         b_eval_outp_out = b_eval_outp_out.cpu().detach().numpy()
         b_eval_outp_out = b_eval_outp_out.squeeze()
         idxs = PreProcessOutput(idxs.squeeze())
         labels = PreProcessOutput(b_eval_outp_out)
         
-        print(idxs)
-        print(labels)
+        # print(idxs)
+        # print(labels)
         
-        
+        # Sirve solo si batch_size = 1
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
             # Evaluación estricta
             countAcc += 1
             
+        if len(idxs) != len(set(idxs)):
+            n_invalid_tours += 1
+        else:
+            len_tour = compute_len_tour(b_eval_inp.cpu().detach().numpy(), idxs)
+            len_tours += len_tour
     
-    
-    
-    Acc = countAcc/eval_ds.__len__()
+    Acc = countAcc/eval_ds.__len__() # cuidado al momento de evaluar en batch
+    len_tour_mean = len_tours/eval_ds.__len__()
     print("The Accuracy of the model is: {}".format(Acc))
-
-
-def plot_one_tour(model, example, cudaAvailable):
+    print("Number of Invalid Tours: {}".format(n_invalid_tours))
+    print("Total Number of Tours: {}".format(eval_ds.__len__()))
+    print("Avg Tour Length: {:.3f}".format(len_tour_mean))
+    n_rows = n_plt_tours // n_cols
+    n_rows += n_plt_tours % n_cols
+    pos = range(1, n_plt_tours+1)
     
-    # if cudaAvailable:
-    #     model = model.cuda()
+    i_tour_alrea_sel = []
+    # fig, ax = plt.subplots(n_plt_tours, figsize=(10,10))
+    fig = plt.figure(figsize=(10,10))
+    for i in range(n_plt_tours):
+        
+        Run = True
+        while Run:
+            i_tour = np.random.randint(0, len(eval_ds))
+            if not i_tour in i_tour_alrea_sel:
+                Run = False
+                i_tour_alrea_sel.append(i_tour)
+        example = eval_ds.__getitem__(i_tour)
+        # ax_ = ax[i]
+        ax = fig.add_subplot(n_rows, n_cols, pos[i])
+        plot_one_tour(model, example, ax, cudaAvailable)
+    
+    plt.show()
+    
+
+def plot_one_tour(model, example, ax=None, cudaAvailable=False):
+    
+    if cudaAvailable:
+        model = model.cuda()
     model.eval()
     inp, inp_len, outp_in, outp_out, outp_len = example
     inp_t = Variable(torch.from_numpy(np.array([inp])))
     inp_len = torch.from_numpy(inp_len)
     outp_in = Variable(torch.from_numpy(np.array([outp_in])))
     outp_out = Variable(torch.from_numpy(outp_out))
-    align_score = model(inp_t, inp_len, outp_in, outp_len)
-    align_score = align_score[0].detach().numpy()
+    
+    if cudaAvailable:
+        model = model.cuda()
+        inp_t = inp_t.cuda()
+        inp_len = inp_len.cuda()
+        outp_in = outp_in.cuda()
+        outp_out  = outp_out.cuda()
+    
+    align_score, idxs = model(inp_t, inp_len, outp_in, outp_len)
+    align_score = align_score[0].detach().cpu().numpy()
     idxs = np.argmax(align_score, axis=1)
     idxs = idxs.squeeze()
     idxs = PreProcessOutput(idxs)
     
     inp = inp[1:, :]
-    plt.figure(figsize=(10,10))
-    plt.plot(inp[:,0], inp[:,1], 'o')
-    for i in range(idxs.shape[0]-1):
-        plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
+    ax.scatter(inp[:,0], inp[:, 1])
+    # plt.plot(inp[:,0], inp[:,1], 'o')
+    for i in range(len(idxs)-1):
+        start_pos = inp[idxs[i]]
+        end_pos = inp[idxs[i+1]]
+        ax.annotate("", xy=start_pos, xycoords='data', xytext=end_pos, textcoords='data',
+                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3"))
+        # plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
         
 
 def eval_tour_len_and_acc(align_score):
@@ -151,12 +197,15 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
     
   listOfLoss = []
   listOfLossEval = []
+  list_valid_tours = []
+  list_valid_tours_eval = []
   cnt = 0
   # Training
   for epoch in range(nepoch):
     model.train()
     total_loss = 0.
     batch_cnt = 0.
+    valid_tours = 0
     for b_inp, b_inp_len, b_outp_in, b_outp_out, b_outp_len in train_dl:
       b_inp = Variable(b_inp)
       b_outp_in = Variable(b_outp_in)
@@ -169,7 +218,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
         b_outp_len = b_outp_len.cuda()
       
       optimizer.zero_grad()
-      align_score = model(b_inp, b_inp_len, b_outp_in, b_outp_len)
+      align_score, idxs = model(b_inp, b_inp_len, b_outp_in, b_outp_len)
       b_outp_len = b_outp_len.squeeze(-1)
       loss = criterion(b_outp_out, align_score, b_outp_len)
       
@@ -177,17 +226,27 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
       l = loss.item()
       total_loss += l
       batch_cnt += 1
-
       loss.backward()
       clip_grad_norm(model.parameters(), clip_norm)
       optimizer.step()
-    print("Epoch : {}, loss {}".format(epoch, total_loss / batch_cnt))
+      
+      idxs = idxs.detach().cpu().numpy()
+      
+      valid_tours += count_valid_tours(idxs)
+          
+      
+    print("Epoch : {} || loss : {:.3f} || Valid Tours : {:.3f}".format(epoch,
+                                                               total_loss / batch_cnt, 
+                                                              valid_tours/train_ds.__len__()))
     listOfLoss.append(total_loss/batch_cnt)
+    list_valid_tours.append(valid_tours/train_ds.__len__())
     
-    if(epoch%freqEval==0):
+    if epoch%freqEval==0 and epoch > 0:
         model.eval()
         total_loss_eval = 0
         batch_cnt = 0
+        valid_tours_eval = 0
+        
         for b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_out, b_eval_outp_len in eval_dl:
             
             b_eval_inp = Variable(b_eval_inp)
@@ -201,13 +260,21 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
                 b_eval_outp_out = b_eval_outp_out.cuda()
                 b_eval_outp_len = b_eval_outp_len.cuda()
             
-            align_score = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
+            align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
             loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len.squeeze(-1))
             l = loss.item()
             total_loss_eval += l
             batch_cnt += 1
-        print("Epoch: {}, Eval Loss {}".format(epoch, total_loss_eval/batch_cnt))
+            
+            idxs = idxs.detach().cpu().numpy()
+      
+            valid_tours_eval += count_valid_tours(idxs)
+            
+        print("Epoch: {} || Eval Loss : {:.3f} || Eval Valid Tours : {:.3f}".format(epoch,
+                                                                            total_loss_eval/batch_cnt,
+                                                                          valid_tours_eval/eval_ds.__len__()))
         listOfLossEval.append(total_loss_eval/batch_cnt)
+        list_valid_tours_eval.append(valid_tours_eval/eval_ds.__len__())
   
   # ext. is .pt 
   torch.save(model.state_dict(), model_file)
@@ -217,7 +284,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
   minutes, seconds = divmod(rem, 60)
 
   print("Training of Pointer Networks takes: {:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
-  return listOfLoss, listOfLossEval
+  return listOfLoss, listOfLossEval, list_valid_tours, list_valid_tours_eval
 
 if __name__ == "__main__":
     
@@ -229,7 +296,7 @@ if __name__ == "__main__":
     num_layers = 1
     encoder_input_size = 2 
     rnn_hidden_size = 64
-    save_model_name = "PointerModel_Sup_5.pt"
+    save_model_name = "PointerModel_Sup_5_sec.pt"
     batch_size = 1000
     bidirectional = False
     rnn_type = "LSTM"
@@ -237,7 +304,7 @@ if __name__ == "__main__":
     attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 20
+    nepoch = 30
     lr = 1e-2
     model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
     
@@ -250,14 +317,10 @@ if __name__ == "__main__":
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo pre-entrenado.
-    model.load_state_dict(torch.load("PointerModel_Sup_5.pt"))
+    model.load_state_dict(torch.load("PointerModel_Sup_5_sec.pt"))
     
     # Entrenamiento del modelo
     # TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
     #                                   model_file=save_model_name, batchSize=batch_size, lr=lr)
     # Evaluación del modelo en un conjunto de evaluación
-    # eval_model(model, eval_ds, cudaAvailable)
-
-    # Grafica un viaje de ejemplo
-    example = eval_ds.__getitem__(0)
-    plot_one_tour(model, example, cudaAvailable)    
+    eval_model(model, eval_ds, cudaAvailable, n_plt_tours=7, n_cols=3)  

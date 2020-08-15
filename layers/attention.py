@@ -76,10 +76,10 @@ class Attention(nn.Module):
         if training_type == "Sup":
             # probs = probs.transpose(1,2)
             # d = probs*src # pointer network paper
-            d = torch.bmm(probs, src)
+            d_prime= torch.bmm(probs, src)
             # d = d.sum(dim=2)
             # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
-            concat_d = (d.transpose(0, 1), tgt.transpose(0, 1))
+            concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))
         # if one_step:
         #     attn_h = attn_h.squeeze(1)
         #     probs = probs.squeeze(1)

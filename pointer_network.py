@@ -23,12 +23,13 @@ class PointerNetRNNDecoder(RNNDecoderBase):
     def forward(self, tgt, memory_bank, hidden, inp, Mode="Train"):
         
         align_scores = []
+        idxs = []
         memory_bank = memory_bank.transpose(0, 1)
         idx = torch.zeros((inp.size()))
-        for i in range(tgt.shape[0]):
+        for i in range(tgt.shape[0]): # For each nodes
             
             if i == 0 or Mode=="train":
-                dec_i = tgt[i, :, :].unsqueeze(0)
+                dec_i = tgt[i, :, :].unsqueeze(0)# if teaching_forcing_cnt < random else pred
             elif Mode =="Eval":
                 dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:]
             dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
@@ -38,9 +39,11 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             
             idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
-        align_scores = torch.stack(align_scores, dim=2)
-        align_scores = align_scores.squeeze(-1)
-        return align_scores
+            idxs.append(idx)
+        align_scores = torch.stack(align_scores, dim=2).squeeze(-1)
+        # align_scores = align_scores.squeeze(-1)
+        idxs = torch.stack(idxs, dim=1).squeeze(-1)
+        return align_scores, idxs
     
 class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
@@ -153,8 +156,8 @@ class PointerNet(nn.Module):
         if self.attn_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]
             memory_bank, hidden = self.encoder(inp, inp_len)
-            align_score = self.decoder(outp, memory_bank, hidden, inp, Mode=Mode)
-            return align_score
+            align_score, idxs = self.decoder(outp, memory_bank, hidden, inp, Mode=Mode)
+            return align_score, idxs
         elif self.attn_type == "RL":
             
             (encoder_hx, encoder_cx) = self.encoder.enc_init_state
