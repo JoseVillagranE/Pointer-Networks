@@ -22,6 +22,9 @@ from TSPDataset import TSPDataset
 from utils import compute_len_tour, count_valid_tours
 from pointer_network import PointerNet, PointerNetLoss
 import warnings
+
+from tensorboardX import SummaryWriter
+
 warnings.filterwarnings("ignore")
 
 '''
@@ -82,7 +85,7 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols
             b_eval_outp_out = b_eval_outp_out.cuda()
             b_eval_outp_len = b_eval_outp_len.cuda()
         
-        align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Mode="Eval")
+        align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
         align_score = align_score.cpu().detach().numpy()
         # idxs = np.argmax(align_score, axis=2)
         idxs = idxs.cpu().numpy()
@@ -176,7 +179,8 @@ def eval_tour_len_and_acc(align_score):
     
     
 def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_size=128, beam_width=2, lr=1e-3, clip_norm=2.0,
-             weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5):
+             weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5, Teaching_Forcing=1,
+             writer=None):
     
   t0 = time()
 #  # Pytroch configuration
@@ -218,7 +222,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
         b_outp_len = b_outp_len.cuda()
       
       optimizer.zero_grad()
-      align_score, idxs = model(b_inp, b_inp_len, b_outp_in, b_outp_len)
+      align_score, idxs = model(b_inp, b_inp_len, b_outp_in, b_outp_len, Teaching_Forcing=Teaching_Forcing)
       b_outp_len = b_outp_len.squeeze(-1)
       loss = criterion(b_outp_out, align_score, b_outp_len)
       
@@ -234,7 +238,9 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
       
       valid_tours += count_valid_tours(idxs)
           
-      
+    writer.add_scalar('training loss', total_loss/batch_cnt, epoch)
+    writer.add_scalar('Valid Tours', valid_tours/train_ds.__len__(), epoch)
+    
     print("Epoch : {} || loss : {:.3f} || Valid Tours : {:.3f}".format(epoch,
                                                                total_loss / batch_cnt, 
                                                               valid_tours/train_ds.__len__()))
@@ -260,7 +266,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
                 b_eval_outp_out = b_eval_outp_out.cuda()
                 b_eval_outp_len = b_eval_outp_len.cuda()
             
-            align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len)
+            align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
             loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len.squeeze(-1))
             l = loss.item()
             total_loss_eval += l
@@ -269,7 +275,9 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
             idxs = idxs.detach().cpu().numpy()
       
             valid_tours_eval += count_valid_tours(idxs)
-            
+        writer.add_scalar('Val loss', total_loss_eval/batch_cnt, epoch)
+        writer.add_scalar('Val Valid Tours', valid_tours_eval/train_ds.__len__(), epoch)
+    
         print("Epoch: {} || Eval Loss : {:.3f} || Eval Valid Tours : {:.3f}".format(epoch,
                                                                             total_loss_eval/batch_cnt,
                                                                           valid_tours_eval/eval_ds.__len__()))
@@ -296,8 +304,8 @@ if __name__ == "__main__":
     num_layers = 1
     encoder_input_size = 2 
     rnn_hidden_size = 64
-    save_model_name = "PointerModel_Sup_5_sec.pt"
-    batch_size = 1000
+    save_model_name = "PointerModel_Sup_5_teach.pt"
+    batch_size = 128
     bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
@@ -305,7 +313,9 @@ if __name__ == "__main__":
     C = None
     training_type = "Sup"
     nepoch = 30
-    lr = 1e-2
+    lr = 1e-3
+    Teaching_Forcing = 0.5
+    
     model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
     
     weights_init(model)
@@ -317,10 +327,19 @@ if __name__ == "__main__":
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo pre-entrenado.
-    model.load_state_dict(torch.load("PointerModel_Sup_5_sec.pt"))
+    # model.load_state_dict(torch.load("PointerModel_Sup_5_sec.pt"))
+    
+    # Crear summary
+    num_exp = 1
+    file_writer = "TSP_Sup_" + str(num_exp)
+    writer = SummaryWriter('runs/' + file_writer)
+    
+    
+    
     
     # Entrenamiento del modelo
-    # TrainingLoss, EvalLoss = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
-    #                                   model_file=save_model_name, batchSize=batch_size, lr=lr)
+    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
+                                      model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
+                                      writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
-    eval_model(model, eval_ds, cudaAvailable, n_plt_tours=7, n_cols=3)  
+    # eval_model(model, eval_ds, cudaAvailable, n_plt_tours=7, n_cols=3)  

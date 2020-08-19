@@ -20,7 +20,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         self.attention = Attention(attn_type, hidden_size, batch_size, C=C, 
                                    is_cuda_available=is_cuda_available)
     
-    def forward(self, tgt, memory_bank, hidden, inp, Mode="Train"):
+    def forward(self, tgt, memory_bank, hidden, inp, Teaching_Forcing=0):
         
         align_scores = []
         idxs = []
@@ -28,10 +28,13 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         idx = torch.zeros((inp.size()))
         for i in range(tgt.shape[0]): # For each nodes
             
-            if i == 0 or Mode=="train":
-                dec_i = tgt[i, :, :].unsqueeze(0)# if teaching_forcing_cnt < random else pred
-            elif Mode =="Eval":
-                dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:]
+            if i == 0 or Teaching_Forcing > np.random.random():
+                dec_i = tgt[i, :, :].unsqueeze(0)
+            else:
+                dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)
+            # dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:] if np.random.random() > Teaching_Forcing else tgt[i, :, :].unsqueeze(0)
+            
+            
             dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)
             
@@ -149,14 +152,14 @@ class PointerNet(nn.Module):
                                     num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="RL", C=C)
          
       
-    def forward(self, inp, inp_len, outp, outp_len, Mode='Train'):
+    def forward(self, inp, inp_len, outp, outp_len, Teaching_Forcing=0):
         
         inp = inp.transpose(0, 1) # [batch, seq_len, emb_size]
         
         if self.attn_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]
             memory_bank, hidden = self.encoder(inp, inp_len)
-            align_score, idxs = self.decoder(outp, memory_bank, hidden, inp, Mode=Mode)
+            align_score, idxs = self.decoder(outp, memory_bank, hidden, inp, Teaching_Forcing=Teaching_Forcing)
             return align_score, idxs
         elif self.attn_type == "RL":
             
