@@ -32,9 +32,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             if i == 0 or Teaching_Forcing > np.random.random():
                 dec_i = tgt[i, :, :].unsqueeze(0)
             else:
-                dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)
-            # dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:] if np.random.random() > Teaching_Forcing else tgt[i, :, :].unsqueeze(0)
-            
+                dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)            
             
             dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)

@@ -85,7 +85,7 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols
             b_eval_outp_out = b_eval_outp_out.cuda()
             b_eval_outp_len = b_eval_outp_len.cuda()
         
-        align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
+        align_score, _, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
         align_score = align_score.cpu().detach().numpy()
         # idxs = np.argmax(align_score, axis=2)
         idxs = idxs.cpu().numpy()
@@ -155,7 +155,7 @@ def plot_one_tour(model, example, ax=None, cudaAvailable=False):
         outp_in = outp_in.cuda()
         outp_out  = outp_out.cuda()
     
-    align_score, idxs = model(inp_t, inp_len, outp_in, outp_len)
+    align_score, _,  idxs = model(inp_t, inp_len, outp_in, outp_len)
     align_score = align_score[0].detach().cpu().numpy()
     idxs = np.argmax(align_score, axis=1)
     idxs = idxs.squeeze()
@@ -276,7 +276,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
       
             valid_tours_eval += count_valid_tours(idxs)
         writer.add_scalar('Val loss', total_loss_eval/batch_cnt, epoch)
-        writer.add_scalar('Val Valid Tours', valid_tours_eval/train_ds.__len__(), epoch)
+        writer.add_scalar('Val Valid Tours', valid_tours_eval/eval_ds.__len__(), epoch)
     
         print("Epoch: {} || Eval Loss : {:.3f} || Eval Valid Tours : {:.3f}".format(epoch,
                                                                             total_loss_eval/batch_cnt,
@@ -303,8 +303,8 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 256
-    save_model_name = "PointerModel_Sup_5_teach.pt"
+    rnn_hidden_size = 64
+    save_model_name = "Pesos/PointerModel_Sup_5_teach.pt"
     batch_size = 128
     bidirectional = False
     rnn_type = "LSTM"
@@ -320,14 +320,14 @@ if __name__ == "__main__":
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=10)
     eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=-1)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo pre-entrenado.
-    # model.load_state_dict(torch.load("PointerModel_Sup_5_sec.pt"))
+    model.load_state_dict(torch.load('Pesos/PointerModel_Sup_5_sec.pt'))
     
     # Crear summary
     num_exp = 1
@@ -338,8 +338,8 @@ if __name__ == "__main__":
     
     
     # Entrenamiento del modelo
-    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
-                                      model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
-                                      writer=writer)
+    # TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
+    #                                   model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
+    #                                   writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
-    # eval_model(model, eval_ds, cudaAvailable, n_plt_tours=7, n_cols=3)  
+    eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)  
