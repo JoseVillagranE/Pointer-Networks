@@ -80,6 +80,8 @@ class Attention(nn.Module):
             # d = d.sum(dim=2)
             # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
             concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))
+            
+            return concat_d, probs, logit
         # if one_step:
         #     attn_h = attn_h.squeeze(1)
         #     probs = probs.squeeze(1)

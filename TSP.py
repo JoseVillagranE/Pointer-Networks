@@ -222,7 +222,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
         b_outp_len = b_outp_len.cuda()
       
       optimizer.zero_grad()
-      align_score, idxs = model(b_inp, b_inp_len, b_outp_in, b_outp_len, Teaching_Forcing=Teaching_Forcing)
+      align_score, logits, idxs = model(b_inp, b_inp_len, b_outp_in, b_outp_len, Teaching_Forcing=Teaching_Forcing)
       b_outp_len = b_outp_len.squeeze(-1)
       loss = criterion(b_outp_out, align_score, b_outp_len)
       
@@ -266,7 +266,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
                 b_eval_outp_out = b_eval_outp_out.cuda()
                 b_eval_outp_len = b_eval_outp_len.cuda()
             
-            align_score, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
+            align_score, logits, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
             loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len.squeeze(-1))
             l = loss.item()
             total_loss_eval += l
@@ -303,7 +303,7 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 64
+    rnn_hidden_size = 256
     save_model_name = "PointerModel_Sup_5_teach.pt"
     batch_size = 128
     bidirectional = False
@@ -314,7 +314,7 @@ if __name__ == "__main__":
     training_type = "Sup"
     nepoch = 30
     lr = 1e-3
-    Teaching_Forcing = 0.5
+    Teaching_Forcing = 1 #  =1 completamente supervisado
     
     model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
     

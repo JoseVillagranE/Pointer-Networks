@@ -24,6 +24,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         
         align_scores = []
         idxs = []
+        logits = []
         memory_bank = memory_bank.transpose(0, 1)
         idx = torch.zeros((inp.size()))
         for i in range(tgt.shape[0]): # For each nodes
@@ -38,15 +39,17 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)
             
-            hidden, align_score, _ = self.attention(memory_bank, dec_outp, training_type="Sup")
+            hidden, align_score, logit = self.attention(memory_bank, dec_outp, training_type="Sup")
             
             idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
+            logits.append(logit)
             idxs.append(idx)
         align_scores = torch.stack(align_scores, dim=2).squeeze(-1)
+        logits = torch.stack(logits, dim=2).squeeze(-1)
         # align_scores = align_scores.squeeze(-1)
         idxs = torch.stack(idxs, dim=1).squeeze(-1)
-        return align_scores, idxs
+        return align_scores, logits, idxs
     
 class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
@@ -159,8 +162,8 @@ class PointerNet(nn.Module):
         if self.attn_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]
             memory_bank, hidden = self.encoder(inp, inp_len)
-            align_score, idxs = self.decoder(outp, memory_bank, hidden, inp, Teaching_Forcing=Teaching_Forcing)
-            return align_score, idxs
+            align_score, logits, idxs = self.decoder(outp, memory_bank, hidden, inp, Teaching_Forcing=Teaching_Forcing)
+            return align_score, logits, idxs
         elif self.attn_type == "RL":
             
             (encoder_hx, encoder_cx) = self.encoder.enc_init_state
@@ -191,6 +194,7 @@ class PointerNetLoss(nn.Module):
     """
     def __init__(self):
         super().__init__()
+        self.eps = 1e-7
     
     def forward(self, target, logits, lengths):
         """
@@ -202,7 +206,7 @@ class PointerNetLoss(nn.Module):
         
         _, tgt_max_len = target.size()
         logits_flat = logits.view(-1, logits.size(-1))
-        log_logits_flat = torch.log(logits_flat)
+        log_logits_flat = torch.log(logits_flat + self.eps)
         target_flat = target.view(-1, 1).long()
         losses_flat = -torch.gather(log_logits_flat, dim=1, index = target_flat)
         losses = losses_flat.view(*target.size())
