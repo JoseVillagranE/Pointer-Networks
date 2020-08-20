@@ -204,9 +204,10 @@ class PointerNetLoss(nn.Module):
         lengths : length of label data (bz)
         """
         
+        logits = logits.clamp(min=self.eps)
         _, tgt_max_len = target.size()
         logits_flat = logits.view(-1, logits.size(-1))
-        log_logits_flat = torch.log(logits_flat + self.eps)
+        log_logits_flat = torch.log(logits_flat)
         target_flat = target.view(-1, 1).long()
         losses_flat = -torch.gather(log_logits_flat, dim=1, index = target_flat)
         losses = losses_flat.view(*target.size())
