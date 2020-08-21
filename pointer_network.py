@@ -34,10 +34,9 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             else:
                 dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)            
             
-            dec_outp, hidden_dec = self.rnn(dec_i, hidden) # i=0 -> token
+            dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)
-            
-            hidden, align_score, logit = self.attention(memory_bank, dec_outp, training_type="Sup")
+            hidden_att, align_score, logit = self.attention(memory_bank, dec_outp, training_type="Sup")
             
             idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
@@ -192,7 +191,7 @@ class PointerNetLoss(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.eps = 1e-7
+        self.eps = 1e-15
     
     def forward(self, target, logits, lengths):
         """

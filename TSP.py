@@ -303,7 +303,7 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 64
+    rnn_hidden_size = 256
     save_model_name = "Pesos/PointerModel_Sup_5_teach.pt"
     batch_size = 128
     bidirectional = False
@@ -314,20 +314,20 @@ if __name__ == "__main__":
     training_type = "Sup"
     nepoch = 30
     lr = 1e-3
-    Teaching_Forcing = 1 #  =1 completamente supervisado
+    Teaching_Forcing = 0 #  =1 completamente supervisado
     
-    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
+    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0.3, batch_size, attn_type=attn_type, C=C)
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=10)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
     eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=-1)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo pre-entrenado.
-    model.load_state_dict(torch.load('Pesos/PointerModel_Sup_5_sec.pt'))
+    # model.load_state_dict(torch.load('Pesos/PointerModel_Sup_5_sec.pt'))
     
     # Crear summary
     num_exp = 1
@@ -338,8 +338,8 @@ if __name__ == "__main__":
     
     
     # Entrenamiento del modelo
-    # TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
-    #                                   model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
-    #                                   writer=writer)
+    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
+                                      model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
+                                      writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
     eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)  
