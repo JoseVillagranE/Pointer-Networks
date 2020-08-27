@@ -17,6 +17,9 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         super(PointerNetRNNDecoder, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         #    self.attention = Attention("dot", hidden_size)
+        
+        if bidirectional:
+            hidden_size *= 2
         self.attention = Attention(attn_type, hidden_size, batch_size, C=C, 
                                    is_cuda_available=is_cuda_available)
     

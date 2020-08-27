@@ -237,9 +237,10 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
       idxs = idxs.detach().cpu().numpy()
       
       valid_tours += count_valid_tours(idxs)
-          
-    writer.add_scalar('training loss', total_loss/batch_cnt, epoch)
-    writer.add_scalar('Valid Tours', valid_tours/train_ds.__len__(), epoch)
+         
+    if writer:
+        writer.add_scalar('training loss', total_loss/batch_cnt, epoch)
+        writer.add_scalar('Valid Tours', valid_tours/train_ds.__len__(), epoch)
     
     print("Epoch : {} || loss : {:.3f} || Valid Tours : {:.3f}".format(epoch,
                                                                total_loss / batch_cnt, 
@@ -275,8 +276,10 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
             idxs = idxs.detach().cpu().numpy()
       
             valid_tours_eval += count_valid_tours(idxs)
-        writer.add_scalar('Val loss', total_loss_eval/batch_cnt, epoch)
-        writer.add_scalar('Val Valid Tours', valid_tours_eval/eval_ds.__len__(), epoch)
+        
+        if writer:
+            writer.add_scalar('Val loss', total_loss_eval/batch_cnt, epoch)
+            writer.add_scalar('Val Valid Tours', valid_tours_eval/eval_ds.__len__(), epoch)
     
         print("Epoch: {} || Eval Loss : {:.3f} || Eval Valid Tours : {:.3f}".format(epoch,
                                                                             total_loss_eval/batch_cnt,
@@ -306,7 +309,7 @@ if __name__ == "__main__":
     rnn_hidden_size = 256
     save_model_name = "Pesos/PointerModel_Sup_5_teach.pt"
     batch_size = 128
-    bidirectional = False
+    bidirectional = True
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
     attn_type = "Sup"
@@ -330,9 +333,10 @@ if __name__ == "__main__":
     # model.load_state_dict(torch.load('Pesos/PointerModel_Sup_5_sec.pt'))
     
     # Crear summary
-    num_exp = 1
-    file_writer = "TSP_Sup_" + str(num_exp)
-    writer = SummaryWriter('runs/' + file_writer)
+    writer=None
+    # num_exp = 1
+    # file_writer = "TSP_Sup_" + str(num_exp)
+    # writer = SummaryWriter('runs/' + file_writer)
     
     
     
