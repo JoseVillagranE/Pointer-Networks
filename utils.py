@@ -39,22 +39,80 @@ def count_valid_tours(idxs, axis=1):
         if idx_i.shape[0] == idx_i_unique.shape[0]:
             valid_tours += 1
     return valid_tours
+
+def name_creation(filetype="pt", *args):
+    
+    if filetype=="pt":
+        name = "PointerModel_"
+    elif filetype == "txt":
+        name = "logs_"
+    else:
+        print("The filetype especified is not implemented")
+        return None
+    
+    for arg in args:
+        if type(arg) == str:
+            name += arg
+        else:
+            name += str(arg)
         
+        if not arg == args[-1]:
+            name += "_"
+        else:
+            name += "." + filetype
+    return name
+        
+def logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, *args):
+    
+    file_name = name_creation("txt", *args)
+    f = open(file_name, "w+")
+    j = 0
+    for i in range(len(tr_loss)):
+        f.write("Epoch : {} || loss : {:.3f} || Valid Tours : {:.3f}\n".format(i,
+                                                               tr_loss[i],
+                                                              valid_tr[i]))
+        if i%freq_eval:
+            f.write("Epoch : {} || Val_loss : {:.3f} || Val_Valid Tours : {:.3f}\n".format(i,
+                                                               val_loss[j], 
+                                                              valid_val[j]))
+            j += 1
+            
+    f.close()
 
 
 
 if __name__ == "__main__":
     
-    tour = np.random.rand(1, 5, 2)
-    print("Tour:", tour)
+    # ------------------- Debug for compute_len_tour and count valid tours ----------------
     
-    idxs = [0, 3, 2, 1, 4]
+    # tour = np.random.rand(1, 5, 2)
+    # print("Tour:", tour)
     
-    len_tour = compute_len_tour(tour, idxs)
-    print("Len tour: ", len_tour)
+    # idxs = [0, 3, 2, 1, 4]
     
-    idxs = np.array([[1, 1, 1], [1, 2, 3], [1, 2, 2]])
+    # len_tour = compute_len_tour(tour, idxs)
+    # print("Len tour: ", len_tour)
     
-    valid_tours = count_valid_tours(idxs)
-    print("Valid Tours: ", valid_tours)
+    # idxs = np.array([[1, 1, 1], [1, 2, 3], [1, 2, 2]])
+    
+    # valid_tours = count_valid_tours(idxs)
+    # print("Valid Tours: ", valid_tours)
+    
+    # -------------------------------------------------------------------------------------
+    
+    # name_pt = name_creation("pt", "Sup", 5, 128)
+    # name_txt = name_creation("txt", "Sup",  5, 128)
+    # print(name_pt)
+    # print(name_txt)
+    
+    # -----------------------------------------------------------------------------------------
+    
+    tr_loss= [0.6, 0.3, 0.23, 0.1] 
+    val_loss = [0.34, 0.15]
+    valid_tr = [0.4, 0.6, 0.7, 0.78]
+    valid_val = [0.65, 0.78]
+    freq_eval = 2
+    
+    logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, "test")
+    
     

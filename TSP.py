@@ -19,7 +19,7 @@ import functools
 from time import time
 import random
 from TSPDataset import TSPDataset
-from utils import compute_len_tour, count_valid_tours
+from utils import compute_len_tour, count_valid_tours, name_creation
 from pointer_network import PointerNet, PointerNetLoss
 import warnings
 
@@ -307,24 +307,27 @@ if __name__ == "__main__":
     num_layers = 1
     encoder_input_size = 2 
     rnn_hidden_size = 256
-    save_model_name = "Pesos/PointerModel_Sup_5_teach.pt"
     batch_size = 128
-    bidirectional = True
+    bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
     attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 30
+    nepoch = 50
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
+    freqEval = 2
     
-    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0.3, batch_size, attn_type=attn_type, C=C)
+    save_model_name = name_creation(training_type, seq_len, batch_size,
+                                               nepoch)
+    
+    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
-    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=-1)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=1000)
+    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=10)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
