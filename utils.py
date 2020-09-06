@@ -5,8 +5,7 @@ Created on Fri Aug 14 15:53:35 2020
 @author: joser
 """
 import numpy as np
-
-
+import math
 
 def compute_len_tour(tour, idxs):
     """
@@ -79,6 +78,23 @@ def logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, *args):
             
     f.close()
 
+# ref: https://machinelearningmastery.com/beam-search-decoder-natural-language-processing/
+def beam_search_decoder(probs, beam_width=3):
+	sequences = [[list(), 0.0]]
+	# walk over each step in sequence
+	for row in probs:
+		all_candidates = list()
+		# expand each current candidate
+		for i in range(len(sequences)):
+			seq, score = sequences[i]
+			for j in range(len(row)):
+				candidate = [seq + [j], score - math.log(row[j])]
+				all_candidates.append(candidate)
+		# order all candidates by score
+		ordered = sorted(all_candidates, key=lambda tup:tup[1])
+		# select k best
+		sequences = ordered[:beam_width]
+	return sequences
 
 
 if __name__ == "__main__":
@@ -105,14 +121,25 @@ if __name__ == "__main__":
     # print(name_pt)
     # print(name_txt)
     
-    # -----------------------------------------------------------------------------------------
+    # -----------------------Debug for logs ------------------------------------------------------
     
-    tr_loss= [0.6, 0.3, 0.23, 0.1] 
-    val_loss = [0.34, 0.15]
-    valid_tr = [0.4, 0.6, 0.7, 0.78]
-    valid_val = [0.65, 0.78]
-    freq_eval = 2
+    # tr_loss= [0.6, 0.3, 0.23, 0.1, 0.3] 
+    # val_loss = [0.34, 0.15]
+    # valid_tr = [0.4, 0.6, 0.7, 0.78, 0.8]
+    # valid_val = [0.65, 0.78]
+    # freq_eval = 2
     
-    logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, "test")
+    # logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, "test")
     
+    # ------------------------------------------------------------------------------------
+    
+    data = [[0.1, 0.2, 0.3, 0.4, 0.5],
+		[0.1, 0.2, 0.3, 0.4, 0.5],
+		[0.5, 0.4, 0.3, 0.2, 0.1]]
+    data = np.array(data)
+    # decode sequence
+    result = beam_search_decoder(data, 3)
+    # print result
+    for seq in result:
+    	print(seq)
     
