@@ -73,7 +73,7 @@ class Attention(nn.Module):
         
         # if len(probs.size())!=1:
         #     probs = probs.transpose(1,2)
-          
+        concat_d = None
         if training_type == "Sup":
             # probs = probs.transpose(1,2)
             # d = probs*src # pointer network paper

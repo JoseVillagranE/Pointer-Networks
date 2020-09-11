@@ -216,6 +216,7 @@ class NeuronalOptm:
         
         if self.is_cuda_available:
             self.model = self.model.cuda()
+            self.critic = self.critic.cuda()
             self.embedding = self.embedding.cuda()
             self.dec_0 = self.dec_0.cuda()
             
@@ -247,7 +248,8 @@ class NeuronalOptm:
         sample_probs = tensor_sort(align_score, idxs, axis=2)
         # print("sample_solution: {}".format(sample_solution))
         tour_length = Reward(sample_solution, self.is_cuda_available)
-        log_probs = torch.log(sample_probs.sum(dim=1))
+        
+        log_probs = torch.log(sample_probs).sum(dim=1)
         # log_probs = log_probs.sum(dim=0).squeeze()
         nll = -1*log_probs     
         
@@ -257,23 +259,22 @@ class NeuronalOptm:
         # log_probs[(log_probs < -1000).detach()] = 0.
         
         adv = tour_length - baseline.detach()
-        actor_loss = adv*log_probs
+        actor_loss = abs(adv*log_probs)
         
         actor_loss = actor_loss.mean()
         self.optimizer.zero_grad()
         actor_loss.backward()
         clip_grad_norm_(self.model.parameters(), clip_norm)
-        
+        self.optimizer.step()
         
         self.optim_critic.zero_grad()
         critic_loss = self.critic_loss(tour_length.detach(), baseline)
-        # critic_loss.backward()
-        # clip_grad_norm_(self.critic.parameters(), clip_norm)
+        critic_loss.backward()
+        clip_grad_norm_(self.critic.parameters(), clip_norm)
+        self.optim_critic.step()
         
-        self.optimizer.step()
-        # self.optim_critic.step()
         self.actor_lr_sch.step()
-        # self.critic_lr_sch.step()
+        self.critic_lr_sch.step()
         
         actor_loss_item = actor_loss.detach().item()
         critic_loss_item = critic_loss.detach().item()
@@ -395,13 +396,13 @@ class NeuronalOptm:
 
 if __name__ == "__main__":
     
-    train_filename="./CH_TSP_data/tsp_all_len20.txt" 
-    val_filename = "./CH_TSP_data/tsp_20_test.txt"
+    train_filename="./CH_TSP_data/tsp5.txt" 
+    val_filename = "./CH_TSP_data/tsp5_test.txt"
 
-    seq_len = 20
+    seq_len = 5
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
-    rnn_hidden_size = 256
+    rnn_hidden_size = 64
     rnn_type = 'LSTM'
     bidirectional = False
     hidden_dim_critic = rnn_hidden_size
@@ -409,15 +410,15 @@ if __name__ == "__main__":
     inp_len_seq = seq_len
     lr = 1e-3
     C = 10 # Logit clipping
-    batch_size = 10000
-    n_epoch = 20
+    batch_size = 100
+    n_epoch = 100
     embedding_dim = 128 #d-dimensional embedding dim
     # encoder_input_size = embedding_dim
     embedding_dim_critic = embedding_dim
     
-    save_model_file="RLPointerModel_TSP20.pt"
+    save_model_file="RLPointerModel_TSP5.pt"
     
-    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=-1)
+    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
     eval_ds = TSPDataset(val_filename, seq_len, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
@@ -427,11 +428,11 @@ if __name__ == "__main__":
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
                            C=C, batch_size=batch_size)
     
-    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
-                                                                                       save_model_file=save_model_file,
-                                                                                       nepoch=n_epoch)
+    # Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
+    #                                                                                    save_model_file=save_model_file,
+    #                                                                                    nepoch=n_epoch)
     
-    # trainer.model.load_state_dict(torch.load(save_model_file))
-    # trainer.plot_one_tour(train_ds.__getitem__(0))
+    trainer.model.load_state_dict(torch.load(save_model_file))
+    trainer.plot_one_tour(train_ds.__getitem__(0))
         
         
