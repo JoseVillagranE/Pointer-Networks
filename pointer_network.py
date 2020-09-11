@@ -51,6 +51,9 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         idxs = torch.stack(idxs, dim=1).squeeze(-1)
         return align_scores, logits, idxs
     
+    
+    
+    
 class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
     Decoder Network For RL training

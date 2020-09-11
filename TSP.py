@@ -186,7 +186,7 @@ def eval_tour_len_and_acc(align_score):
     
 def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_size=128, beam_width=2, lr=1e-3, clip_norm=2.0,
              weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5, Teaching_Forcing=1,
-             writer=None):
+             step_lr=20, gamma_step_lr=0.1, writer=None):
     
   t0 = time()
 #  # Pytroch configuration
@@ -201,6 +201,8 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
   
   criterion = PointerNetLoss()
   optimizer = optim.Adam(model.parameters(), lr=lr)
+  
+  lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size= step_lr, gamma=gamma_step_lr)
   
   if use_cuda:
     model.cuda()
@@ -253,6 +255,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
                                                               valid_tours/train_ds.__len__()))
     listOfLoss.append(total_loss/batch_cnt)
     list_valid_tours.append(valid_tours/train_ds.__len__())
+    lr_scheduler.step()
     
     if epoch%freqEval==0 and epoch > 0:
         model.eval()
@@ -324,6 +327,8 @@ if __name__ == "__main__":
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
+    step_lr=20
+    gamma_step_lr=0.1
     
     save_model_name = name_creation("pt", training_type, seq_len, rnn_hidden_size, batch_size,
                                                nepoch)
