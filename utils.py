@@ -80,21 +80,26 @@ def logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, *args):
 
 # ref: https://machinelearningmastery.com/beam-search-decoder-natural-language-processing/
 def beam_search_decoder(probs, beam_width=3):
-	sequences = [[list(), 0.0]]
-	# walk over each step in sequence
-	for row in probs:
-		all_candidates = list()
-		# expand each current candidate
-		for i in range(len(sequences)):
-			seq, score = sequences[i]
-			for j in range(len(row)):
-				candidate = [seq + [j], score - math.log(row[j])]
-				all_candidates.append(candidate)
-		# order all candidates by score
-		ordered = sorted(all_candidates, key=lambda tup:tup[1])
-		# select k best
-		sequences = ordered[:beam_width]
-	return sequences
+    
+    eps = 1e-7
+    sequences = [[list(), 0.0]]
+    # walk over each step in sequence
+    for row in probs:
+        all_candidates = list()
+        # expand each current candidate
+        for i in range(len(sequences)):
+            seq, score = sequences[i]
+            for j in range(len(row)):
+                prob = row[j]
+                if row[j] < 1e-15:
+                    prob = row[j] + eps
+                candidate = [seq + [j], score - math.log(prob)]
+                all_candidates.append(candidate)
+        # order all candidates by score
+        ordered = sorted(all_candidates, key=lambda tup:tup[1])
+        # select k best
+        sequences = ordered[:beam_width]
+    return sequences
 
 
 if __name__ == "__main__":
@@ -131,9 +136,9 @@ if __name__ == "__main__":
     
     # logs_sup_training(tr_loss, val_loss, valid_tr, valid_val, freq_eval, "test")
     
-    # ------------------------------------------------------------------------------------
+    # -------------------------Debug for Beam Search -----------------------------------------------
     
-    data = [[0.1, 0.2, 0.3, 0.4, 0.5],
+    data = [[1e-55, 0.2, 0.3, 0.4, 0.5],
 		[0.1, 0.2, 0.3, 0.4, 0.5],
 		[0.5, 0.4, 0.3, 0.2, 0.1]]
     data = np.array(data)

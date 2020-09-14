@@ -258,7 +258,7 @@ class NeuronalOptm:
         # # # no forzar el gradiente a grandes números
         # log_probs[(log_probs < -1000).detach()] = 0.
         
-        adv = tour_length - baseline.detach()
+        adv = tour_length.detach() - baseline.detach()
         actor_loss = abs(adv*log_probs)
         
         actor_loss = actor_loss.mean()
@@ -402,7 +402,7 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
-    rnn_hidden_size = 64
+    rnn_hidden_size = 128
     rnn_type = 'LSTM'
     bidirectional = False
     hidden_dim_critic = rnn_hidden_size
@@ -428,9 +428,9 @@ if __name__ == "__main__":
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
                            C=C, batch_size=batch_size)
     
-    # Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
-    #                                                                                    save_model_file=save_model_file,
-    #                                                                                    nepoch=n_epoch)
+    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
+                                                                                        save_model_file=save_model_file,
+                                                                                        nepoch=n_epoch)
     
     trainer.model.load_state_dict(torch.load(save_model_file))
     trainer.plot_one_tour(train_ds.__getitem__(0))

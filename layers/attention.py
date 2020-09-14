@@ -38,15 +38,16 @@ class Attention(nn.Module):
         self.conv_proj = nn.Conv1d(dim, dim, 1 , 1)
         self.W_ref = nn.Linear(dim, dim, bias=False) # En el paper es matriz. Revisar!
         self.W_q = nn.Linear(dim, dim, bias=False)
-        self.v = torch.FloatTensor(dim)
+        # self.v = torch.FloatTensor(dim)
+        self.v = nn.Linear(dim, 1, bias=False)
         if is_cuda_available:
             self.W_ref = self.W_ref.cuda()
             self.W_q = self.W_q.cuda()
             self.conv_proj = self.conv_proj.cuda()
             self.v = self.v.cuda()
         
-        self.v.data.uniform_(0, 1)
-        self.v = nn.Parameter(self.v)
+        # self.v.data.uniform_(0, 1)
+        # self.v = nn.Parameter(self.v)
     def forward(self, src, tgt, mask=None, prev_idxs=None, training_type = "RL", attention_type="Attention"):
         """
         Args:
@@ -58,15 +59,16 @@ class Attention(nn.Module):
         
         
         
-        v = self.v.unsqueeze(0).expand(src.size(0), len(self.v)).unsqueeze(1)
+        # v = self.v.unsqueeze(0).expand(src.size(0), len(self.v)).unsqueeze(1)
         # [batch, 1, hidden_dim] x [batch, hidden, seq_len]
-        u = torch.bmm(v,self.tanh(self.W_q(tgt) + self.W_ref(src)).transpose(1, 2))#.transpose(1, 2)
+        # u = torch.bmm(v,self.tanh(self.W_q(tgt) + self.W_ref(src)).transpose(1, 2))#.transpose(1, 2)
+        u = self.v(self.tanh(self.W_q(tgt) + self.W_ref(src))).transpose(1, 2)
         if self.C:
             logit = self.C*self.tanh(u)
         else:
             logit = u
         
-        if attention_type == Attention and training_type == "RL": 
+        if attention_type == "Attention" and training_type == "RL": 
             logit, mask = apply_mask(logit, mask, prev_idxs)
         # Normalize weights
         probs = F.softmax(logit, -1) # [batch, 1, seq_len]
