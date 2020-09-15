@@ -259,7 +259,7 @@ class NeuronalOptm:
         # log_probs[(log_probs < -1000).detach()] = 0.
         
         adv = tour_length.detach() - baseline.detach()
-        actor_loss = abs(adv*log_probs)
+        actor_loss = adv*log_probs
         
         actor_loss = actor_loss.mean()
         self.optimizer.zero_grad()
@@ -402,23 +402,23 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
-    rnn_hidden_size = 128
+    rnn_hidden_size = 512
     rnn_type = 'LSTM'
     bidirectional = False
     hidden_dim_critic = rnn_hidden_size
     process_block_iter = 3
     inp_len_seq = seq_len
     lr = 1e-3
-    C = 10 # Logit clipping
+    C = 4 # Logit clipping
     batch_size = 100
-    n_epoch = 100
+    n_epoch = 1000000
     embedding_dim = 128 #d-dimensional embedding dim
     # encoder_input_size = embedding_dim
     embedding_dim_critic = embedding_dim
     
     save_model_file="RLPointerModel_TSP5.pt"
     
-    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=1000)
+    train_ds = TSPDataset(train_filename, seq_len, lineCountLimit=100)
     eval_ds = TSPDataset(val_filename, seq_len, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
