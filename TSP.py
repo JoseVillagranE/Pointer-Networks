@@ -315,7 +315,7 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 64
+    rnn_hidden_size = 512
     batch_size = 128
     bidirectional = False
     rnn_type = "LSTM"
@@ -323,7 +323,7 @@ if __name__ == "__main__":
     attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 20
+    nepoch = 10000000
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
@@ -337,14 +337,14 @@ if __name__ == "__main__":
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=100)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=1000)
     eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=10)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
     
     # Descomentar si es que existe un modelo pre-entrenado.
-    model.load_state_dict(torch.load('Pesos/PointerModel_Sup_5_sec.pt'))
+    # model.load_state_dict(torch.load('Pesos/PointerModel_Sup_5_sec.pt'))
     
     # Crear summary
     writer=None
@@ -356,9 +356,9 @@ if __name__ == "__main__":
     
     
     # Entrenamiento del modelo
-    # TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
-    #                                   model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
-    #                                   writer=writer)
+    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
+                                      model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
+                                      writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
     eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)
     
@@ -367,4 +367,3 @@ if __name__ == "__main__":
     
     # logs_sup_training(TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval, freqEval,
     #                   training_type, seq_len, rnn_hidden_size, batch_size, nepoch)
-    

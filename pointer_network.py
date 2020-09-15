@@ -39,7 +39,9 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             
             dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
             dec_outp = dec_outp.transpose(0, 1)
-            hidden_att, align_score, logit = self.attention(memory_bank, dec_outp, training_type="Sup")
+            hidden_att, align_score, logit = self.attention(memory_bank, 
+                                                            hidden[0][0].unsqueeze(0).transpose(0, 1), # dec_outp
+                                                            training_type="Sup")
             
             idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
@@ -63,6 +65,9 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         input_size, hidden_size, dropout, batch_size, attn_type, C=None, n_glimpses=1):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
+        
+        if bidirectional:
+            hidden_size *= 2
         
         self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
         self.glimpse = Attention(attn_type, hidden_size, batch_size, C=C)
@@ -88,14 +93,16 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         align_scores = []
         mask = None
         idxs = None
-        dec_inp = dec_inp_b.unsqueeze(0) # [1, batch_size, 128]. idx=0 -> token <g>
+        dec_inp = dec_inp_b.unsqueeze(0) # [1, batch_size, hidden_size]. idx=0 -> token <g>
         for i in range(inp.shape[0]):
-            dec_outp, hidden = self.decoder(dec_inp, hidden) #[seq_len=1, batch, hidden_size]
+            dec_outp, next_hidden = self.decoder(dec_inp, hidden) #[seq_len=1, batch, hidden_size]
             if i == 0:
                 memory_bank = memory_bank.transpose(0, 1) #[batch_size, seq_len, hidden_size]
             dec_outp = dec_outp.transpose(0, 1)# [batch_size, 1, hidden_size]
             for j in range(self.n_glimpses):
-                _, align_score, _ = self.glimpse(memory_bank, dec_outp, None, None)
+                _, align_score, _ = self.glimpse(memory_bank,
+                                                 hidden[0][0].unsqueeze(0).transpose(0, 1),
+                                                 None, None)
                 if len(align_score.size())==1:
                     # dec_outp = torch.bmm(align_score, memory_bank)
                     dec_outp = torch.einsum('bc,bch->bh', align_score.squeeze(1), memory_bank)
@@ -109,7 +116,11 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
                     dec_outp = torch.einsum('bc,bch->bh', align_score.squeeze(1), memory_bank)
                     dec_outp = dec_outp.unsqueeze(0).transpose(0, 1)
             # align_score -> [batch, seq_len, 1]
-            _, align_score, mask = self.attention(memory_bank, dec_outp, mask, idxs) # align_score -> [batch_size, #nodes]
+            dec_inp = dec_inp.transpose(0, 1)
+            _, align_score, mask = self.attention(memory_bank,
+                                                  hidden[0][0].unsqueeze(0).transpose(0, 1), 
+                                                  mask, idxs) # align_score -> [batch_size, #nodes]
+            hidden = next_hidden
             align_score = align_score.squeeze()
             idxs = align_score.multinomial(num_samples=1).squeeze()
             # idxs = torch.argmax(align_score, dim=1)

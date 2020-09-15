@@ -62,7 +62,8 @@ class Attention(nn.Module):
         # v = self.v.unsqueeze(0).expand(src.size(0), len(self.v)).unsqueeze(1)
         # [batch, 1, hidden_dim] x [batch, hidden, seq_len]
         # u = torch.bmm(v,self.tanh(self.W_q(tgt) + self.W_ref(src)).transpose(1, 2))#.transpose(1, 2)
-        u = self.v(self.tanh(self.W_q(tgt) + self.W_ref(src))).transpose(1, 2)
+        temp = self.tanh(self.W_q(tgt) + self.W_ref(src))
+        u = self.v(temp).transpose(1, 2)
         if self.C:
             logit = self.C*self.tanh(u)
         else:

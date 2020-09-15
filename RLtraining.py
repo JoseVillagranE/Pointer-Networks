@@ -402,11 +402,11 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
-    rnn_hidden_size = 512
+    rnn_hidden_size = 128
     rnn_type = 'LSTM'
     bidirectional = False
     hidden_dim_critic = rnn_hidden_size
-    process_block_iter = 3
+    process_block_iter = 0
     inp_len_seq = seq_len
     lr = 1e-3
     C = 4 # Logit clipping
