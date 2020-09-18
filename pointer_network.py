@@ -43,8 +43,6 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             
             dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
 #            dec_outp = dec_outp.transpose(0, 1)
-            
-            
             idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
             logits.append(logit)
