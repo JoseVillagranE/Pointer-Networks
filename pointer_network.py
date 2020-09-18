@@ -37,11 +37,13 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             else:
                 dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)            
             
-            dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
-            dec_outp = dec_outp.transpose(0, 1)
             hidden_att, align_score, logit = self.attention(memory_bank, 
                                                             hidden[0][0].unsqueeze(0).transpose(0, 1), # dec_outp
                                                             training_type="Sup")
+            
+            dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
+#            dec_outp = dec_outp.transpose(0, 1)
+            
             
             idx = align_score.argmax(dim=2)
             align_scores.append(align_score)
