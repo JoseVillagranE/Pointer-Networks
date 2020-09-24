@@ -69,25 +69,25 @@ class Attention(nn.Module):
         else:
             logit = u
         
-        if attention_type == "Attention" and training_type == "RL": 
-            logit, mask = apply_mask(logit, mask, prev_idxs)
+        #if attention_type == "Attention" and training_type == "RL": 
+        logit, mask = apply_mask(logit, mask, prev_idxs)
         # Normalize weights
         probs = F.softmax(logit, -1) # [batch, 1, seq_len]
         
         # if len(probs.size())!=1:
         #     probs = probs.transpose(1,2)
-        concat_d = None
-        if training_type == "Sup":
-            # probs = probs.transpose(1,2)
-            # d = probs*src # pointer network paper
-            d_prime= torch.bmm(probs, src)
-            # d = d.sum(dim=2)
-            # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
-            concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))
+        # concat_d = None
+        # if training_type == "Sup":
+        #     # probs = probs.transpose(1,2)
+        #     # d = probs*src # pointer network paper
+        #     d_prime= torch.bmm(probs, src)
+        #     # d = d.sum(dim=2)
+        #     # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
+        #     concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))
             
-            return concat_d, probs, logit
+        #     return concat_d, probs, logit
         # if one_step:
         #     attn_h = attn_h.squeeze(1)
         #     probs = probs.squeeze(1)
         # else:
-        return concat_d, probs, mask # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]
+        return probs, logit, mask  # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]
