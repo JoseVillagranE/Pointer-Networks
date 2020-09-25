@@ -93,8 +93,9 @@ def beam_search_decoder(probs, beam_width=3):
                 prob = row[j]
                 if row[j] < 1e-15:
                     prob = row[j] + eps
-                candidate = [seq + [j], score - math.log(prob)]
-                all_candidates.append(candidate)
+                if j not in seq:
+                    candidate = [seq + [j], score - math.log(prob)]
+                    all_candidates.append(candidate)
         # order all candidates by score
         ordered = sorted(all_candidates, key=lambda tup:tup[1])
         # select k best
