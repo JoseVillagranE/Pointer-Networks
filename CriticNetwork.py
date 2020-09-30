@@ -78,7 +78,7 @@ class CriticNetwork(nn.Module):
     
         for i in range(self.process_block_iter):
             # memory_bank_pr, (hidden, c_n) = self.process_block(dec_i1)
-            _, align_score, _ = self.attending(memory_bank, dec_i1, None, None)
+            _, align_score, _ = self.attending(memory_bank, hidden[0][0].unsqueeze(0).transpose(0, 1), None, None)
             # dec_i1 = torch.bmm(align_score, memory_bank)
             dec_i1 = torch.einsum('bc,bch->bh', align_score.squeeze(1), memory_bank)
             dec_i1 = dec_i1.unsqueeze(1)

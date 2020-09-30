@@ -16,7 +16,7 @@ class TSPDataset(Dataset):
         
         self.seq_len = seq_len
         self.lineCountLimit = lineCountLimit
-        self.START = [0, 0]
+        self.START = [0, 0] # Token
         self.END = [0, 0]
         self.training_type = training_type
         self.load_data(filename)
@@ -57,9 +57,10 @@ class TSPDataset(Dataset):
                     outp_out += [idx]
                     
                 if self.training_type == "Sup":
-                    inp = self.START + inp
-                    inp_len += 1
-                    outp_in = self.START + outp_in
+                    # inp = self.START + inp
+                    # inp_len += 1
+                    # outp_in = self.START + outp_in
+                    outp_in = outp_in
                 inp_len = len(inp) // 2
                 
                 # assert self.seq_len + 1 >= inp_len
@@ -73,8 +74,8 @@ class TSPDataset(Dataset):
                 outp_out = outp_out[:-1]
                 outp_len -= 1
                 
-                outp_out = outp_out + [0] * (self.seq_len + 1 - outp_len)
-                outp_len += 1
+                outp_out = outp_out - np.ones_like(outp_out)# + [0] * (self.seq_len + 1 - outp_len)
+                # outp_len += 1
                 
                 outp_out = np.array(outp_out)
                 outp_len = np.array([outp_len])

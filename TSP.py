@@ -256,7 +256,6 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
     listOfLoss.append(total_loss/batch_cnt)
     list_valid_tours.append(valid_tours/train_ds.__len__())
     lr_scheduler.step()
-    
     if epoch%freqEval==0 and epoch > 0:
         model.eval()
         total_loss_eval = 0
@@ -315,7 +314,7 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 512
+    rnn_hidden_size = 256
     batch_size = 128
     bidirectional = False
     rnn_type = "LSTM"
@@ -323,7 +322,7 @@ if __name__ == "__main__":
     attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 10000000
+    nepoch = 20
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
@@ -337,8 +336,8 @@ if __name__ == "__main__":
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=1000)
-    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=10)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
+    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=-1)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))

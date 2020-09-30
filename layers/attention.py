@@ -51,7 +51,7 @@ class Attention(nn.Module):
     def forward(self, src, tgt, mask=None, prev_idxs=None, training_type = "RL", attention_type="Attention"):
         """
         Args:
-        src : source values (bz, src_len, hidden_dim). enc_i or ref in Bello's Paper
+        src : source values (bz, seq_len, hidden_dim). enc_i or ref in Bello's Paper
         
         tgt : target values (bz, 1, hidden_dim). dec_i or q
         src_lengths : source values length
@@ -91,3 +91,15 @@ class Attention(nn.Module):
         #     probs = probs.squeeze(1)
         # else:
         return concat_d, probs, mask # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]
+    
+    
+if __name__ == "__main__":
+    
+    attn = Attention("general", 64, 10)
+    
+    inp = torch.randn((10, 2, 64))
+    tgt = torch.randn(10, 1, 64)
+    
+    _, probs, _ = attn(inp, tgt)
+    print(probs.shape)
+    
