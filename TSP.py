@@ -11,7 +11,7 @@ from torch import optim
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-from torch.nn.utils import clip_grad_norm
+from torch.nn.utils import clip_grad_norm_
 import sys
 import matplotlib.pyplot as plt
 
@@ -56,12 +56,13 @@ def weights_init(module, a=-0.08, b=0.08):
 
 def PreProcessOutput(outp):
     
-    outp = [outp[i] - 1 for i in range(outp.shape[0]) if outp[i] != 0]
+    # outp = [outp[i] - 1 for i in range(outp.shape[0]) if outp[i] != 0]
+    outp = [outp[i] for i in range(outp.shape[0])]
     return outp
 
 
 def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols=1,
-               beam_serch=True, beam_width=3):
+               beam_serch=False, beam_width=3):
     model.eval()
     if cudaAvailable:
          use_cuda = True
@@ -97,11 +98,9 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols
             
         b_eval_outp_out = b_eval_outp_out.cpu().detach().numpy()
         b_eval_outp_out = b_eval_outp_out.squeeze()
+        
         idxs = PreProcessOutput(idxs.squeeze())
         labels = PreProcessOutput(b_eval_outp_out)
-        
-        # print(idxs)
-        # print(labels)
         
         # Sirve solo si batch_size = 1
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
@@ -167,7 +166,7 @@ def plot_one_tour(model, example, ax=None, cudaAvailable=False):
     idxs = idxs.squeeze()
     idxs = PreProcessOutput(idxs)
     
-    inp = inp[1:, :]
+    # inp = inp[1:, :]
     ax.scatter(inp[:,0], inp[:, 1])
     # plt.plot(inp[:,0], inp[:,1], 'o')
     for i in range(len(idxs)-1):
@@ -239,7 +238,7 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
       total_loss += l
       batch_cnt += 1
       loss.backward()
-      clip_grad_norm(model.parameters(), clip_norm)
+      clip_grad_norm_(model.parameters(), clip_norm)
       optimizer.step()
       
       idxs = idxs.detach().cpu().numpy()
@@ -322,7 +321,7 @@ if __name__ == "__main__":
     attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 20
+    nepoch = 10
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
@@ -359,7 +358,7 @@ if __name__ == "__main__":
                                       model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
                                       writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
-    # eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)
+    eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)
     
     
     # Guardar logs

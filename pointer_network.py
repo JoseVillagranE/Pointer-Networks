@@ -26,9 +26,9 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         
         self.dec_0 = torch.FloatTensor(input_size)
         self.dec_0.data.uniform_(0, 1)
-        self.dec_0_i = self.dec_0.unsqueeze(0).repeat(batch_size, 1)
         if torch.cuda.is_available():
-            self.dec_0_i = self.dec_0_i.cuda()
+                    self.dec_0 = self.dec_0.cuda()
+        self.dec_0 = nn.Parameter(self.dec_0)
     
     def forward(self, tgt, memory_bank, hidden, inp, Teaching_Forcing=0):
         
@@ -40,7 +40,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         for i in range(tgt.shape[0]): # For each nodes [seq_len, batch_size, input_size]
             
             if i == 0:
-                dec_i = nn.Parameter(self.dec_0_i.unsqueeze(0))
+                dec_i = self.dec_0.unsqueeze(0).repeat(tgt.shape[1], 1).unsqueeze(0)
             elif Teaching_Forcing > np.random.random():
                 dec_i = tgt[i, :, :].unsqueeze(0)
             else:    
@@ -55,10 +55,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             else:
                 align_score = align_score.squeeze(1)
                 idx = align_score.multinomial(num_samples=1)            
-            
-#            dec_outp = dec_outp.transpose(0, 1)
-            # if i < tgt.shape[0] - 1:
-            # idx = align_score.argmax(dim=2)
+
             align_scores.append(align_score)
             logits.append(logit)
             idxs.append(idx)
@@ -206,16 +203,22 @@ class PointerNet(nn.Module):
             return align_score, memory_bank, dec_memory_bank, idxs
 
 
-def sequence_mask(lengths, maxlen, dtype=torch.bool):
-    if maxlen is None:
-        maxlen = lengths.max()
-    a = torch.ones((len(lengths), maxlen))
-    if torch.cuda.is_available():
-        a = a.cuda()
+# def sequence_mask(lengths, maxlen, dtype=torch.bool):
+#     if maxlen is None:
+#         maxlen = lengths.max()
+#     a = torch.ones((len(lengths), maxlen))
+#     if torch.cuda.is_available():
+#         a = a.cuda()
         
-    mask = ~(a.cumsum(dim=1).t() > lengths.float()).t()
-    mask.type(dtype)
-    return mask
+#     mask = ~(a.cumsum(dim=1).t() > lengths.float()).t()
+#     mask.type(dtype)
+#     return mask
+
+def sequence_mask(lengths, max_len=None):
+    bz = lengths.numel()
+    max_len = max_len or lengths.max()
+    a = torch.arange(0, max_len).type_as(lengths).repeat(bz, 1)
+    return (torch.arange(0, max_len).type_as(lengths).repeat(bz, 1).lt(lengths.unsqueeze(1)))
 
 
 class PointerNetLoss(nn.Module):
