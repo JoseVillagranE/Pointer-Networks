@@ -78,8 +78,8 @@ class RNNEncoder(EncoderBase):
 
   def init_hidden(self, hidden_dim):
         """Trainable initial hidden state"""
-        enc_init_hx = Variable(torch.zeros(hidden_dim), requires_grad=False)
-        enc_init_cx = Variable(torch.zeros(hidden_dim), requires_grad=False)
+        enc_init_hx = Variable(torch.zeros(hidden_dim), requires_grad=True)
+        enc_init_cx = Variable(torch.zeros(hidden_dim), requires_grad=True)
         if torch.cuda.is_available():
             enc_init_cx = enc_init_cx.cuda()
             enc_init_hx = enc_init_hx.cuda()

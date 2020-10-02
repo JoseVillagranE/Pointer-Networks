@@ -314,8 +314,8 @@ if __name__ == "__main__":
     seq_len = 5
     num_layers = 1
     encoder_input_size = 2 
-    rnn_hidden_size = 256
-    batch_size = 128
+    rnn_hidden_size = 128
+    batch_size = 100
     bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
@@ -359,7 +359,7 @@ if __name__ == "__main__":
                                       model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
                                       writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
-    eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)
+    # eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)
     
     
     # Guardar logs

@@ -23,6 +23,12 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             hidden_size *= 2
         self.attention = Attention(attn_type, hidden_size, batch_size, C=C, 
                                    is_cuda_available=is_cuda_available)
+        
+        self.dec_0 = torch.FloatTensor(input_size)
+        self.dec_0.data.uniform_(0, 1)
+        self.dec_0_i = self.dec_0.unsqueeze(0).repeat(batch_size, 1)
+        if torch.cuda.is_available():
+            self.dec_0_i = self.dec_0_i.cuda()
     
     def forward(self, tgt, memory_bank, hidden, inp, Teaching_Forcing=0):
         
@@ -31,25 +37,25 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         logits = []
         memory_bank = memory_bank.transpose(0, 1)
         idx = torch.zeros((inp.size()))
-        for i in range(tgt.shape[0]): # For each nodes
-        
+        for i in range(tgt.shape[0]): # For each nodes [seq_len, batch_size, input_size]
+            
+            if i == 0:
+                dec_i = nn.Parameter(self.dec_0_i.unsqueeze(0))
+            elif Teaching_Forcing > np.random.random():
+                dec_i = tgt[i, :, :].unsqueeze(0)
+            else:    
+                dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)
+            
             hidden_att, align_score, logit = self.attention(memory_bank, 
                                                             hidden[0].transpose(0, 1), # dec_outp
                                                             training_type="Sup")
-            
-            # if i == 0 or Teaching_Forcing > np.random.random():
-            #     dec_i = tgt[i, :, :].unsqueeze(0)
-            # else:
+            dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
             if self.greedy: 
                 idx = align_score.argmax(dim=2)
             else:
                 align_score = align_score.squeeze(1)
-                idx = align_score.multinomial(num_samples=1)
-            dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)            
+                idx = align_score.multinomial(num_samples=1)            
             
-            
-            
-            dec_outp, hidden = self.rnn(dec_i, hidden_att) # i=0 -> token
 #            dec_outp = dec_outp.transpose(0, 1)
             # if i < tgt.shape[0] - 1:
             # idx = align_score.argmax(dim=2)

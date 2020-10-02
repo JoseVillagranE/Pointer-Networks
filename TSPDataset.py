@@ -59,8 +59,8 @@ class TSPDataset(Dataset):
                 if self.training_type == "Sup":
                     # inp = self.START + inp
                     # inp_len += 1
-                    # outp_in = self.START + outp_in
-                    outp_in = outp_in
+                    outp_in = self.START + outp_in
+                    # outp_in = outp_in
                 inp_len = len(inp) // 2
                 
                 # assert self.seq_len + 1 >= inp_len
@@ -73,6 +73,7 @@ class TSPDataset(Dataset):
                 
                 outp_out = outp_out[:-1]
                 outp_len -= 1
+                outp_in = outp_in[:-1]
                 
                 outp_out = outp_out - np.ones_like(outp_out)# + [0] * (self.seq_len + 1 - outp_len)
                 # outp_len += 1
