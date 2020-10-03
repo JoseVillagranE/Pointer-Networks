@@ -46,10 +46,12 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             else:    
                 dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)
             
-            hidden_att, align_score, logit = self.attention(memory_bank, 
-                                                            hidden[0].transpose(0, 1), # dec_outp
-                                                            training_type="Sup")
             dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
+            
+            hidden_att, align_score, logit = self.attention(memory_bank, 
+                                                            hidden[0].transpose(0, 1),
+                                                            # dec_outp.transpose(0, 1),
+                                                            training_type="Sup")
             if self.greedy: 
                 idx = align_score.argmax(dim=2)
             else:
@@ -74,7 +76,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
 
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, attn_type, C=None, n_glimpses=1):
+        input_size, hidden_size, dropout, batch_size, attn_type, C=None, n_glimpses=0):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         
@@ -107,13 +109,13 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         idxs = None
         dec_inp = dec_inp_b.unsqueeze(0) # [1, batch_size, hidden_size]. idx=0 -> token <g>
         for i in range(inp.shape[0]):
-            dec_outp, next_hidden = self.decoder(dec_inp, hidden) #[seq_len=1, batch, hidden_size]
+            dec_outp, hidden = self.decoder(dec_inp, hidden) #[seq_len=1, batch, hidden_size]
             if i == 0:
                 memory_bank = memory_bank.transpose(0, 1) #[batch_size, seq_len, hidden_size]
             dec_outp = dec_outp.transpose(0, 1)# [batch_size, 1, hidden_size]
             for j in range(self.n_glimpses):
                 _, align_score, _ = self.glimpse(memory_bank,
-                                                 hidden[0][0].unsqueeze(0).transpose(0, 1),
+                                                 hidden[0].unsqueeze(0).transpose(0, 1),
                                                  None, None)
                 if len(align_score.size())==1:
                     # dec_outp = torch.bmm(align_score, memory_bank)
@@ -130,9 +132,8 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             # align_score -> [batch, seq_len, 1]
             dec_inp = dec_inp.transpose(0, 1)
             _, align_score, mask = self.attention(memory_bank,
-                                                  hidden[0][0].unsqueeze(0).transpose(0, 1), 
+                                                  hidden[0].transpose(0, 1), 
                                                   mask, idxs) # align_score -> [batch_size, #nodes]
-            hidden = next_hidden
             align_score = align_score.squeeze()
             idxs = align_score.multinomial(num_samples=1).squeeze()
             # idxs = torch.argmax(align_score, dim=1)
@@ -183,7 +184,7 @@ class PointerNet(nn.Module):
       
     def forward(self, inp, inp_len, outp, outp_len, Teaching_Forcing=0):
         
-        inp = inp.transpose(0, 1) # [batch, seq_len, emb_size]
+        inp = inp.transpose(0, 1) # [batch, seq_len, emb_size] before transpose
         
         if self.attn_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]

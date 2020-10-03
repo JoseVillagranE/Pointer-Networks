@@ -67,7 +67,10 @@ class RNNEncoder(EncoderBase):
     if self.pack_padded_seq and lengths is not None:
       lengths = lengths.view(-1).tolist()
       packed_src = pack(src, lengths)
-    memory_bank, hidden_final = self.rnn(packed_src, hidden)
+      
+    memory_bank, hidden_final = self.rnn(packed_src,
+                                         (self.enc_init_state[0].repeat(src.shape[1], 1).unsqueeze(0),
+                                          self.enc_init_state[1].repeat(src.shape[1], 1).unsqueeze(0)))
 
     if self.pack_padded_seq and lengths is not None:
       memory_bank = unpack(memory_bank)[0]

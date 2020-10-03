@@ -62,7 +62,7 @@ def PreProcessOutput(outp):
 
 
 def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols=1,
-               beam_serch=False, beam_width=3):
+               beam_serch=True, beam_width=3):
     model.eval()
     if cudaAvailable:
          use_cuda = True
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 10
+    nepoch = 30
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
@@ -335,8 +335,8 @@ if __name__ == "__main__":
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=-1)
-    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=-1)
+    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=1000)
+    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))

@@ -51,9 +51,9 @@ class Attention(nn.Module):
     def forward(self, src, tgt, mask=None, prev_idxs=None, training_type = "RL", attention_type="Attention"):
         """
         Args:
-        src : source values (bz, seq_len, hidden_dim). enc_i or ref in Bello's Paper
+        src : source values (bz, seq_len, hidden_dim). Hidden state of encoder
         
-        tgt : target values (bz, 1, hidden_dim). dec_i or q
+        tgt : target values (bz, 1, hidden_dim). dec_i or q 
         src_lengths : source values length
         """
         
