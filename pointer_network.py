@@ -13,7 +13,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
     """ Pointer network RNN Decoder, process all the output together
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, attn_type,
+        input_size, hidden_size, dropout, batch_size, mask_bool=False, hidden_att_bool=False,
         C=None, is_cuda_available=False, greedy=True):
         super(PointerNetRNNDecoder, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
@@ -21,8 +21,12 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         self.greedy = greedy
         if bidirectional:
             hidden_size *= 2
-        self.attention = Attention(attn_type, hidden_size, batch_size, C=C, 
+        self.attention = Attention(hidden_size, C=C, mask_bool=mask_bool,
+                                   hidden_att_bool=hidden_att_bool,
                                    is_cuda_available=is_cuda_available)
+        
+        self.mask_bool = mask_bool
+        self.hidden_att_bool= hidden_att_bool
         
         self.dec_0 = torch.FloatTensor(input_size)
         self.dec_0.data.uniform_(0, 1)
@@ -35,36 +39,46 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         align_scores = []
         idxs = []
         logits = []
+        mask = None
+        idx = None
         memory_bank = memory_bank.transpose(0, 1)
-        idx = torch.zeros((inp.size()))
-        for i in range(tgt.shape[0]): # For each nodes [seq_len, batch_size, input_size]
-            
+        # tgt (outp_in)= [#nodes] == [token, n# nodes]
+        
+        for i in range(tgt.shape[0] + 1): # For each nodes [seq_len, batch_size, input_size]
             if i == 0:
                 dec_i = self.dec_0.unsqueeze(0).repeat(tgt.shape[1], 1).unsqueeze(0)
             elif Teaching_Forcing > np.random.random():
                 dec_i = tgt[i, :, :].unsqueeze(0)
             else:    
-                dec_i = inp[idx.data.squeeze(), [j for j in range(tgt.shape[1])],:].unsqueeze(0)
+                dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:].unsqueeze(0)
             
-            dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
-            
-            hidden_att, align_score, logit = self.attention(memory_bank, 
+            align_score = None
+            if self.hidden_att_bool:
+                hidden_att, align_score, logit, mask = self.attention(memory_bank, 
                                                             hidden[0].transpose(0, 1),
-                                                            # dec_outp.transpose(0, 1),
-                                                            training_type="Sup")
-            if self.greedy: 
-                idx = align_score.argmax(dim=2)
+                                                            mask, 
+                                                            idx)
+                dec_outp, hidden = self.rnn(dec_i, hidden_att) # i=0 -> token
+                
             else:
-                align_score = align_score.squeeze(1)
-                idx = align_score.multinomial(num_samples=1)            
+                dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
+                align_score, logit, mask = self.attention(memory_bank, 
+                                                            hidden[0].transpose(0, 1),
+                                                            mask, 
+                                                            idx)
+            if self.greedy: 
+                idx = align_score.argmax(dim=2).squeeze() # todo bien
+            else:
+                idx = align_score.squeeze().multinomial(num_samples=1)     
 
-            align_scores.append(align_score)
-            logits.append(logit)
+            align_scores.append(align_score.squeeze())
+            logits.append(logit.squeeze())
             idxs.append(idx)
-        align_scores = torch.stack(align_scores, dim=2).squeeze(-1)
-        logits = torch.stack(logits, dim=2).squeeze(-1)
-        # align_scores = align_scores.squeeze(-1)
-        idxs = torch.stack(idxs, dim=1).squeeze(-1)
+            
+        
+        align_scores = torch.stack(align_scores, dim=1) # todo bien
+        logits = torch.stack(logits, dim=1)
+        idxs = torch.stack(idxs, dim=1) if idxs[0].dim() > 1 else torch.stack(idxs)
         return align_scores, logits, idxs
     
     
@@ -76,15 +90,15 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
 
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, attn_type, C=None, n_glimpses=0):
+        input_size, hidden_size, dropout, batch_size, C=None, n_glimpses=0):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         
         if bidirectional:
             hidden_size *= 2
         
-        self.attention = Attention(attn_type, hidden_size, batch_size, C=C)
-        self.glimpse = Attention(attn_type, hidden_size, batch_size, C=C)
+        self.attention = Attention(hidden_size, C=C)
+        self.glimpse = Attention(hidden_size, C=C)
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         self.decoder = nn.LSTM(input_size, hidden_size)
@@ -166,32 +180,36 @@ class PointerNet(nn.Module):
     dropout : dropout rate
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
-        encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="Sup", C=None, 
+        encoder_input_size, rnn_hidden_size, dropout=0, batch_size=128, 
+        mask_bool=False, hidden_att_bool=False, training_type="Sup", C=None, 
         is_cuda_available = False):
         super().__init__()
         self.encoder = RNNEncoder(rnn_type, bidirectional,num_layers, encoder_input_size,
                                   rnn_hidden_size, dropout)
-        self.attn_type = attn_type
-        if attn_type == "Sup":
+        self.training_type = training_type
+        if training_type == "Sup":
             self.decoder = PointerNetRNNDecoder(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size,
-                                    dropout,batch_size, attn_type=attn_type, C=C,
-                                    is_cuda_available=is_cuda_available)
-        elif attn_type == "RL":
+                                    dropout,batch_size, mask_bool=mask_bool,
+                                    hidden_att_bool=hidden_att_bool,
+                                    C=C, is_cuda_available=is_cuda_available)
+        elif training_type == "RL":
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
-                                    num_layers, encoder_input_size, rnn_hidden_size, dropout, batch_size, attn_type="RL", C=C)
+                                    num_layers, encoder_input_size, rnn_hidden_size,
+                                    dropout, batch_size, C=C)
          
       
     def forward(self, inp, inp_len, outp, outp_len, Teaching_Forcing=0):
         
         inp = inp.transpose(0, 1) # [batch, seq_len, emb_size] before transpose
         
-        if self.attn_type == "Sup":
+        if self.training_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]
             memory_bank, hidden = self.encoder(inp, inp_len)
-            align_score, logits, idxs = self.decoder(outp, memory_bank, hidden, inp, Teaching_Forcing=Teaching_Forcing)
+            align_score, logits, idxs = self.decoder(outp, memory_bank, hidden, inp,
+                                                     Teaching_Forcing=Teaching_Forcing)
             return align_score, logits, idxs
-        elif self.attn_type == "RL":
+        elif self.training_type == "RL":
             
             (encoder_hx, encoder_cx) = self.encoder.enc_init_state
             encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
@@ -202,18 +220,7 @@ class PointerNet(nn.Module):
             memory_bank, hidden_final = self.encoder(inp, inp_len, (encoder_hx, encoder_cx))
             align_score, idxs, dec_memory_bank  = self.decoder(outp, inp, memory_bank, hidden_final)
             return align_score, memory_bank, dec_memory_bank, idxs
-
-
-# def sequence_mask(lengths, maxlen, dtype=torch.bool):
-#     if maxlen is None:
-#         maxlen = lengths.max()
-#     a = torch.ones((len(lengths), maxlen))
-#     if torch.cuda.is_available():
-#         a = a.cuda()
         
-#     mask = ~(a.cumsum(dim=1).t() > lengths.float()).t()
-#     mask.type(dtype)
-#     return mask
 
 def sequence_mask(lengths, max_len=None):
     bz = lengths.numel()
@@ -225,9 +232,10 @@ def sequence_mask(lengths, max_len=None):
 class PointerNetLoss(nn.Module):
     """ Loss function for pointer network
     """
-    def __init__(self):
+    def __init__(self, norm=False):
         super().__init__()
         self.eps = 1e-15
+        self.norm = norm
     
     def forward(self, target, logits, lengths):
         """
@@ -236,7 +244,7 @@ class PointerNetLoss(nn.Module):
         logits : predicts (bz, tgt_max_len, src_max_len)
         lengths : length of label data (bz)
         """
-        
+
         logits = logits.clamp(min=self.eps)
         _, tgt_max_len = target.size()
         logits_flat = logits.view(-1, logits.size(-1))
@@ -247,5 +255,9 @@ class PointerNetLoss(nn.Module):
         mask = sequence_mask(lengths, tgt_max_len)
         mask = Variable(mask)
         losses = losses * mask.float()
-        loss = losses.sum() / lengths.float().sum()
+        
+        if self.norm:
+            loss = losses.sum() / lengths.float().sum()
+        else:
+            loss = losses.sum() 
         return loss

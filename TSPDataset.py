@@ -11,14 +11,13 @@ from copy import copy # shallow copy. copy dont change the old list
 
 class TSPDataset(Dataset):
     
-    def __init__(self, filename, seq_len, training_type="RL", lineCountLimit=-1):
+    def __init__(self, filename, f_city_fixed=True, lineCountLimit=-1):
         super().__init__()
         
-        self.seq_len = seq_len
         self.lineCountLimit = lineCountLimit
+        self.f_city_fixed = f_city_fixed
         self.START = [0, 0] # Token
         self.END = [0, 0]
-        self.training_type = training_type
         self.load_data(filename)
         
     
@@ -56,14 +55,13 @@ class TSPDataset(Dataset):
                         idxs.append(idx)
                     outp_out += [idx]
                     
-                if self.training_type == "Sup":
-                    # inp = self.START + inp
-                    # inp_len += 1
+                if self.f_city_fixed:
+                    inp = self.START + inp
+                    inp_len += 1
                     outp_in = self.START + outp_in
                     # outp_in = outp_in
-                inp_len = len(inp) // 2
                 
-                # assert self.seq_len + 1 >= inp_len
+                inp_len = len(inp) // 2
                 
                 inp = np.array(inp).reshape([-1, 2])
                 inp_len = np.array([inp_len])
@@ -71,12 +69,17 @@ class TSPDataset(Dataset):
                 
                 outp_in = np.array(outp_in).reshape([-1, 2])
                 
-                outp_out = outp_out[:-1]
+                outp_out = outp_out[:-1] 
                 outp_len -= 1
-                outp_in = outp_in[:-1]
+                # outp_in = outp_in[:-1]
                 
-                outp_out = outp_out - np.ones_like(outp_out)# + [0] * (self.seq_len + 1 - outp_len)
-                # outp_len += 1
+                if self.f_city_fixed:
+                    outp_out = [0] + outp_out + [0]
+                    outp_len += 2
+                else:
+                    outp_out += [outp_out[0]]
+                    outp_out = outp_out - np.ones_like(outp_out)
+                    outp_len += 1
                 
                 outp_out = np.array(outp_out)
                 outp_len = np.array([outp_len])
@@ -96,8 +99,17 @@ class TSPDataset(Dataset):
                 
 
 if __name__=="__main__":
-    training_type = "Sup"
-    train_ds = TSPDataset("./CH_TSP_data/tsp5.txt", 5, training_type, lineCountLimit=5)
+    train_ds = TSPDataset("./CH_TSP_data/tsp5.txt", f_city_fixed=True, lineCountLimit=5)
+    
+    inp, inp_len, outp_in, outp_out, outp_len = train_ds.__getitem__(0)
+    
+    print(inp)
+    print(outp_out)
+    print(outp_in)
+    print(inp_len)
+    print(outp_len)
+    
+    train_ds = TSPDataset("./CH_TSP_data/tsp5.txt", f_city_fixed=False, lineCountLimit=5)
     
     inp, inp_len, outp_in, outp_out, outp_len = train_ds.__getitem__(0)
     

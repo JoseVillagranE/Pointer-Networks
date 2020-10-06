@@ -45,12 +45,11 @@ def weights_init(module, a=-0.08, b=0.08):
         a -> int. LowerBound
         b -> int. UpperBound
     """
-    classname = module.__class__.__name__
-    if classname in layers_of_interest:
-        nn.init.uniform_(module.weight, a=a, b=b)
-    elif classname.find("LSTM") != -1:
-        for param in module.parameters():
-            nn.init.uniform_(param.data)
+    for name, param in module.named_parameters():
+        if "bias" in name:
+            nn.init.constant(param, 0.0)
+        elif "weight" in name:
+            nn.init.uniform_(param, a=a, b=b)
             
     
 
@@ -61,8 +60,8 @@ def PreProcessOutput(outp):
     return outp
 
 
-def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols=1,
-               beam_serch=True, beam_width=3):
+def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1, n_plt_tours=0, n_cols=1,
+               beam_serch=False, beam_width=3):
     model.eval()
     if cudaAvailable:
          use_cuda = True
@@ -88,11 +87,13 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols
             b_eval_outp_out = b_eval_outp_out.cuda()
             b_eval_outp_len = b_eval_outp_len.cuda()
         
+        if embedding:
+            b_eval_inp, b_eval_outp_in = embedding(b_eval_inp), embedding(b_eval_outp_in)
         align_score, _, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
         align_score = align_score.cpu().detach().numpy()
         
         if beam_serch:
-            idxs = np.array(beam_search_decoder(align_score[0][0], 3)[0][0])
+            idxs = np.array(beam_search_decoder(align_score, 3)[0][0])
         else:
             idxs = idxs.cpu().numpy()
             
@@ -101,6 +102,8 @@ def eval_model(model, eval_ds, cudaAvailable, batchSize=1, n_plt_tours=0, n_cols
         
         idxs = PreProcessOutput(idxs.squeeze())
         labels = PreProcessOutput(b_eval_outp_out)
+        print(idxs)
+        print(labels)
         
         # Sirve solo si batch_size = 1
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
@@ -176,35 +179,36 @@ def plot_one_tour(model, example, ax=None, cudaAvailable=False):
                     arrowprops=dict(arrowstyle="->", connectionstyle="arc3"))
         # plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
         
-
-def eval_tour_len_and_acc(align_score):
-    idxs = np.argmax(align_score, axis=1)
-    print(idxs)
-    # idxs = PreProcessOutput(idxs)
     
-    
-def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_size=128, beam_width=2, lr=1e-3, clip_norm=2.0,
-             weight_decay=0.1, nepoch = 30, model_file="PointerModel.pt", freqEval=5, Teaching_Forcing=1,
-             step_lr=20, gamma_step_lr=0.1, writer=None):
+def training(model, train_ds, eval_ds, embedding=None, cudaAvailable=False, batchSize=10, attention_size=128,
+             beam_width=2, lr=1e-3, optimizer = "SGD", clip_norm=2.0, weight_decay=0.1, nepoch = 30,
+             model_file="PointerModel.pt", freqEval=5, Teaching_Forcing=1,
+             step_lr=20, gamma_step_lr=0.1, norm=False, writer=None):
     
   t0 = time()
 #  # Pytroch configuration
-  if cudaAvailable:
-    use_cuda = True
-    torch.cuda.device(0)
-  else:
-    use_cuda = False
   
   train_dl = DataLoader(train_ds, num_workers=0, batch_size=batchSize)
   eval_dl = DataLoader(eval_ds, num_workers=0, batch_size=batchSize)
   
-  criterion = PointerNetLoss()
-  optimizer = optim.Adam(model.parameters(), lr=lr)
+  criterion = PointerNetLoss(norm)
+      
+  if cudaAvailable:
+    use_cuda = True
+    torch.cuda.device(0)
+    model = model.cuda()
+  else:
+    use_cuda = False
+  
+  if optimizer == "SGD":
+      optimizer = optim.SGD(model.parameters(), lr=lr)
+  elif optimizer == "Adam":
+      optimizer = optim.Adam(model.parameters(), lr=lr)
+  
+  else:
+      raise NotImplementedError("For the moment optimizer should be Adam or SGD")
   
   lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size= step_lr, gamma=gamma_step_lr)
-  
-  if use_cuda:
-    model.cuda()
     
   listOfLoss = []
   listOfLossEval = []
@@ -227,16 +231,16 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
         b_outp_in = b_outp_in.cuda()
         b_outp_out = b_outp_out.cuda()
         b_outp_len = b_outp_len.cuda()
-      
-      optimizer.zero_grad()
+        
+      if embedding:
+        b_inp, b_outp_in = embedding(b_inp), embedding(b_outp_in)
       align_score, logits, idxs = model(b_inp, b_inp_len, b_outp_in, b_outp_len, Teaching_Forcing=Teaching_Forcing)
       b_outp_len = b_outp_len.squeeze(-1)
       loss = criterion(b_outp_out, align_score, b_outp_len)
-      
-      # eval_tour_len_and_acc(align_score.detach().cpu().numpy())
       l = loss.item()
       total_loss += l
       batch_cnt += 1
+      optimizer.zero_grad()
       loss.backward()
       clip_grad_norm_(model.parameters(), clip_norm)
       optimizer.step()
@@ -274,6 +278,8 @@ def training(model, train_ds, eval_ds, cudaAvailable, batchSize=10, attention_si
                 b_eval_outp_out = b_eval_outp_out.cuda()
                 b_eval_outp_len = b_eval_outp_len.cuda()
             
+            if embedding:
+                b_eval_inp, b_eval_outp_in = embedding(b_eval_inp), embedding(b_eval_outp_in)
             align_score, logits, idxs = model(b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_len, Teaching_Forcing=0)
             loss = criterion(b_eval_outp_out, align_score, b_eval_outp_len.squeeze(-1))
             l = loss.item()
@@ -312,31 +318,40 @@ if __name__ == "__main__":
     
     seq_len = 5
     num_layers = 1
-    encoder_input_size = 2 
+    encoder_input_size = 2
     rnn_hidden_size = 128
-    batch_size = 100
+    batch_size = 128
     bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
-    attn_type = "Sup"
     C = None
     training_type = "Sup"
-    nepoch = 30
+    nepoch = 10
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
     step_lr=20
     gamma_step_lr=0.1
+    norm = True
+    mask_bool = True
+    hidden_att_bool = False
+    dropout = 0
+    optimizer = "SGD"
+    clip_norm=2.0
+    f_city_fixed=True
     
     save_model_name = name_creation("pt", training_type, seq_len, rnn_hidden_size, batch_size,
                                                nepoch)
     
-    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim, rnn_hidden_size, 0, batch_size, attn_type=attn_type, C=C)
+    model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim,
+                       rnn_hidden_size, dropout=dropout, batch_size=batch_size,
+                       mask_bool=mask_bool, hidden_att_bool=hidden_att_bool,
+                       training_type=training_type, C=C)
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, seq_len, training_type, lineCountLimit=1000)
-    eval_ds = TSPDataset(val_filename, seq_len, training_type, lineCountLimit=100)
+    train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
+    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
@@ -350,15 +365,25 @@ if __name__ == "__main__":
     # file_writer = "TSP_Sup_" + str(num_exp)
     # writer = SummaryWriter('runs/' + file_writer)
     
+    embedding=None
+    if embedding_dim > 2:
+      embedding = nn.Linear(2, embedding_dim, bias=True)
     
-    
+      if cudaAvailable:
+        embedding = embedding.cuda()
     
     # Entrenamiento del modelo
-    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model, train_ds, eval_ds, cudaAvailable, nepoch=nepoch, 
-                                      model_file=save_model_name, batchSize=batch_size, lr=lr, Teaching_Forcing=Teaching_Forcing,
+    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model,
+                                      train_ds, eval_ds, embedding=embedding, 
+                                      cudaAvailable=cudaAvailable,
+                                      nepoch=nepoch, 
+                                      model_file=save_model_name, batchSize=batch_size,
+                                      lr=lr, optimizer=optimizer, clip_norm=clip_norm,
+                                      Teaching_Forcing=Teaching_Forcing, norm=norm,
                                       writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
-    eval_model(model, eval_ds, cudaAvailable, n_plt_tours=9, n_cols=3)
+    eval_model(model, eval_ds, embedding=embedding, cudaAvailable=cudaAvailable,
+               n_plt_tours=0, n_cols=3)
     
     
     # Guardar logs
