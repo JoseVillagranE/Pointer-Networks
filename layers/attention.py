@@ -22,8 +22,8 @@ def apply_mask(align_score, mask, prev_idxs):
     
     mask_ = mask.clone()
     if prev_idxs is not None:
-        print(prev_idxs.shape)
-        mask_[[x for x in range(align_score.size(0))],:, [prev_idxs[i] for i in range(prev_idxs.shape[0])]] = 1
+        # [prev_idxs[i] for i in range(prev_idxs.shape[0])]
+        mask_[[x for x in range(align_score.size(0))],:, prev_idxs.data] = 1
         align_score[mask_] = -np.inf
     return align_score, mask_
 class Attention(nn.Module):

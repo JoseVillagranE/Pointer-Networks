@@ -164,11 +164,11 @@ def plot_one_tour(model, example, ax=None, cudaAvailable=False):
         outp_out  = outp_out.cuda()
     
     align_score, _,  idxs = model(inp_t, inp_len, outp_in, outp_len)
-    align_score = align_score[0].detach().cpu().numpy()
-    idxs = np.argmax(align_score, axis=1)
-    idxs = idxs.squeeze()
-    idxs = PreProcessOutput(idxs)
-    
+    align_score = align_score.detach().cpu().numpy()
+    idxs = idxs.detach().cpu().numpy()
+    # idxs = np.argmax(align_score, axis=1)
+    # idxs = idxs.squeeze()
+    # idxs = PreProcessOutput(idxs)
     # inp = inp[1:, :]
     ax.scatter(inp[:,0], inp[:, 1])
     # plt.plot(inp[:,0], inp[:,1], 'o')
@@ -320,7 +320,7 @@ if __name__ == "__main__":
     num_layers = 1
     encoder_input_size = 2
     rnn_hidden_size = 128
-    batch_size = 128
+    batch_size = 10
     bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
@@ -350,8 +350,8 @@ if __name__ == "__main__":
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
-    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=100)
+    train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=10)
+    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=10)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
@@ -383,7 +383,7 @@ if __name__ == "__main__":
                                       writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
     eval_model(model, eval_ds, embedding=embedding, cudaAvailable=cudaAvailable,
-               n_plt_tours=0, n_cols=3)
+               n_plt_tours=9, n_cols=3)
     
     
     # Guardar logs

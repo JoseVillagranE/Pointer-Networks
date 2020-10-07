@@ -42,9 +42,13 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         mask = None
         idx = None
         memory_bank = memory_bank.transpose(0, 1)
-        # tgt (outp_in)= [#nodes] == [token, n# nodes]
+        # tgt (outp_in)= [#nodes, START] == [token, n# nodes]
         
         for i in range(tgt.shape[0] + 1): # For each nodes [seq_len, batch_size, input_size]
+        
+            if self.mask_bool:
+                if i == tgt.shape[0]:
+                    break
             if i == 0:
                 dec_i = self.dec_0.unsqueeze(0).repeat(tgt.shape[1], 1).unsqueeze(0)
             elif Teaching_Forcing > np.random.random():
@@ -74,7 +78,11 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             align_scores.append(align_score.squeeze())
             logits.append(logit.squeeze())
             idxs.append(idx)
-            
+        
+        if self.mask_bool:
+            align_scores.append(align_scores[0])
+            logits.append(logits[0])
+            idxs.append(idxs[0])
         
         align_scores = torch.stack(align_scores, dim=1) # todo bien
         logits = torch.stack(logits, dim=1)
