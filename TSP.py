@@ -28,14 +28,6 @@ from tensorboardX import SummaryWriter
 
 warnings.filterwarnings("ignore")
 
-'''
-TODO:
-    - implementar un formato de evaluación supervisado
-    - Mecanismo de predicción sin label. (test time)
-    
-    - Refactorizar todoooo !!
-'''
-
 layers_of_interest = ["Linear", "Conv1d"]
 def weights_init(module, a=-0.08, b=0.08):
     
@@ -102,19 +94,17 @@ def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1,
         
         idxs = PreProcessOutput(idxs.squeeze())
         labels = PreProcessOutput(b_eval_outp_out)
-        print(idxs)
-        print(labels)
         
         # Sirve solo si batch_size = 1
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
             # Evaluación estricta
             countAcc += 1
             
-        if len(idxs) != len(set(idxs)):
-            n_invalid_tours += 1
-        else:
+        if len(idxs) == len(set(idxs)) + 1 and idxs[0] == idxs[-1]:
             len_tour = compute_len_tour(b_eval_inp.cpu().detach().numpy(), idxs)
             len_tours += len_tour
+        else:
+            n_invalid_tours += 1
     
     Acc = countAcc/eval_ds.__len__() # cuidado al momento de evaluar en batch
     len_tour_mean = len_tours/eval_ds.__len__()
@@ -140,12 +130,12 @@ def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1,
         example = eval_ds.__getitem__(i_tour)
         # ax_ = ax[i]
         ax = fig.add_subplot(n_rows, n_cols, pos[i])
-        plot_one_tour(model, example, ax, cudaAvailable)
+        plot_one_tour(model, example, embedding, ax, cudaAvailable)
     
     plt.show()
     
 
-def plot_one_tour(model, example, ax=None, cudaAvailable=False):
+def plot_one_tour(model, example, embedding=None, ax=None, cudaAvailable=False):
     
     if cudaAvailable:
         model = model.cuda()
@@ -163,6 +153,8 @@ def plot_one_tour(model, example, ax=None, cudaAvailable=False):
         outp_in = outp_in.cuda()
         outp_out  = outp_out.cuda()
     
+    if embedding:
+        inp_t, outp_in = embedding(inp_t), embedding(outp_in)
     align_score, _,  idxs = model(inp_t, inp_len, outp_in, outp_len)
     align_score = align_score.detach().cpu().numpy()
     idxs = idxs.detach().cpu().numpy()
@@ -318,7 +310,7 @@ if __name__ == "__main__":
     
     seq_len = 5
     num_layers = 1
-    encoder_input_size = 2
+    encoder_input_size = 20
     rnn_hidden_size = 128
     batch_size = 10
     bidirectional = False
@@ -326,7 +318,7 @@ if __name__ == "__main__":
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
     C = None
     training_type = "Sup"
-    nepoch = 10
+    nepoch = 1
     lr = 1e-3
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2

@@ -30,12 +30,14 @@ def compute_len_tour(tour, idxs):
 
 def count_valid_tours(idxs, axis=1):
     
-    
+    """
+    idxs -> [seq_len, batch]
+    """
     valid_tours = 0
     for i in range(idxs.shape[0]):
-        idx_i = idxs[i, :]
+        idx_i = idxs[:, i]
         idx_i_unique = np.unique(idx_i)
-        if idx_i.shape[0] == idx_i_unique.shape[0]:
+        if idx_i.shape[0] == idx_i_unique.shape[0] + 1 and idx_i[0] == idx_i[-1]:
             valid_tours += 1
     return valid_tours
 
