@@ -38,6 +38,7 @@ class Attention(nn.Module):
         self.hidden_att_bool = hidden_att_bool
         self.C = C
         self.tanh = nn.Tanh()
+        
         self.W_ref = nn.Linear(hidden_dim, hidden_dim, bias=False) # En el paper es matriz. Revisar!
         self.W_q = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.v = nn.Linear(hidden_dim, 1, bias=False)
@@ -53,7 +54,6 @@ class Attention(nn.Module):
         tgt : target values (bz, 1, hidden_dim). dec_i or q 
         src_lengths : source values length
         """
-
         temp = self.tanh(self.W_q(tgt) + self.W_ref(src))
         u = self.v(temp).transpose(1, 2)
         if self.C:

@@ -53,7 +53,7 @@ class RNNEncoder(EncoderBase):
       num_layers=num_layers,
       dropout=dropout)
     self.use_bridge = use_bridge
-    
+    self.bidirectional = bidirectional
     self.enc_init_state = self.init_hidden(hidden_size)
     
     if self.use_bridge:
@@ -68,9 +68,14 @@ class RNNEncoder(EncoderBase):
       lengths = lengths.view(-1).tolist()
       packed_src = pack(src, lengths)
       
-    memory_bank, hidden_final = self.rnn(packed_src,
-                                         (self.enc_init_state[0].repeat(src.shape[1], 1).unsqueeze(0),
-                                          self.enc_init_state[1].repeat(src.shape[1], 1).unsqueeze(0)))
+      
+    h_0 = self.enc_init_state[0].repeat(src.shape[1], 1).unsqueeze(0)
+    c_0 = self.enc_init_state[1].repeat(src.shape[1], 1).unsqueeze(0)
+    
+    if self.bidirectional:
+        h_0 = h_0.repeat(2, 1, 1)
+        c_0 = c_0.repeat(2, 1, 1)
+    memory_bank, hidden_final = self.rnn(packed_src,(h_0, c_0))
 
     if self.pack_padded_seq and lengths is not None:
       memory_bank = unpack(memory_bank)[0]

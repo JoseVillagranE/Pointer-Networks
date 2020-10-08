@@ -71,6 +71,7 @@ def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1,
         b_eval_inp = Variable(b_eval_inp)
         b_eval_outp_in = Variable(b_eval_outp_in)
         b_eval_outp_out = Variable(b_eval_outp_out)
+        b_eval_inp_copy = b_eval_inp.clone()
         
         if use_cuda:
             b_eval_inp = b_eval_inp.cuda()
@@ -99,9 +100,9 @@ def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1,
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
             # Evaluación estricta
             countAcc += 1
-            
+        
         if len(idxs) == len(set(idxs)) + 1 and idxs[0] == idxs[-1]:
-            len_tour = compute_len_tour(b_eval_inp.cpu().detach().numpy(), idxs)
+            len_tour = compute_len_tour(b_eval_inp_copy.numpy(), idxs)
             len_tours += len_tour
         else:
             n_invalid_tours += 1
@@ -145,7 +146,7 @@ def plot_one_tour(model, example, embedding=None, ax=None, cudaAvailable=False):
     inp_len = torch.from_numpy(inp_len)
     outp_in = Variable(torch.from_numpy(np.array([outp_in])))
     outp_out = Variable(torch.from_numpy(outp_out))
-    
+    inp_copy = inp_t.clone().numpy().squeeze()
     if cudaAvailable:
         model = model.cuda()
         inp_t = inp_t.cuda()
@@ -162,11 +163,11 @@ def plot_one_tour(model, example, embedding=None, ax=None, cudaAvailable=False):
     # idxs = idxs.squeeze()
     # idxs = PreProcessOutput(idxs)
     # inp = inp[1:, :]
-    ax.scatter(inp[:,0], inp[:, 1])
+    ax.scatter(inp_copy[:,0], inp_copy[:, 1])
     # plt.plot(inp[:,0], inp[:,1], 'o')
     for i in range(len(idxs)-1):
-        start_pos = inp[idxs[i]]
-        end_pos = inp[idxs[i+1]]
+        start_pos = inp_copy[idxs[i]]
+        end_pos = inp_copy[idxs[i+1]]
         ax.annotate("", xy=start_pos, xycoords='data', xytext=end_pos, textcoords='data',
                     arrowprops=dict(arrowstyle="->", connectionstyle="arc3"))
         # plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
@@ -325,12 +326,13 @@ if __name__ == "__main__":
     step_lr=20
     gamma_step_lr=0.1
     norm = True
-    mask_bool = True
+    mask_bool = False
     hidden_att_bool = False
     dropout = 0
     optimizer = "SGD"
     clip_norm=2.0
     f_city_fixed=True
+    beam_search = True
     
     save_model_name = name_creation("pt", training_type, seq_len, rnn_hidden_size, batch_size,
                                                nepoch)
@@ -375,7 +377,7 @@ if __name__ == "__main__":
                                       writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
     eval_model(model, eval_ds, embedding=embedding, cudaAvailable=cudaAvailable,
-               n_plt_tours=9, n_cols=3)
+               n_plt_tours=9, n_cols=3, beam_serch=beam_search)
     
     
     # Guardar logs

@@ -27,6 +27,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         
         self.mask_bool = mask_bool
         self.hidden_att_bool= hidden_att_bool
+        self.bidirectional = bidirectional
         
         self.dec_0 = torch.FloatTensor(input_size)
         self.dec_0.data.uniform_(0, 1)
@@ -52,14 +53,17 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             if i == 0:
                 dec_i = self.dec_0.unsqueeze(0).repeat(tgt.shape[1], 1).unsqueeze(0)
             elif Teaching_Forcing > np.random.random():
-                dec_i = tgt[i, :, :].unsqueeze(0)
+                dec_i = tgt[i, :, :].unsqueeze(0) # FIX the embedding issue
             else:    
                 dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:].unsqueeze(0)
             
+            hidden_t = hidden[0].transpose(0, 1)
+            if self.bidirectional:
+                hidden_t = hidden_t.reshape(hidden_t.shape[0], 1, -1)
             align_score = None
             if self.hidden_att_bool:
                 hidden_att, align_score, logit, mask = self.attention(memory_bank, 
-                                                            hidden[0].transpose(0, 1),
+                                                            hidden_t,
                                                             mask, 
                                                             idx)
                 dec_outp, hidden = self.rnn(dec_i, hidden_att) # i=0 -> token
@@ -67,7 +71,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             else:
                 dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
                 align_score, logit, mask = self.attention(memory_bank, 
-                                                            hidden[0].transpose(0, 1),
+                                                            hidden_t,
                                                             mask, 
                                                             idx)
             if self.greedy: 
