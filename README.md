@@ -66,9 +66,9 @@ A modo de primer resultado se presentan aquello obtenidos en la resolución de u
 | Training time 	| 35:54.53 	| 36:00.00 	| 43:22.41 	| 42:31.77 	| 37:13.89 	| 37:10.23 	| 37:33.9 	| 41:10.55 	|
 
 
-Estos resultados corresponden a la evaluación de la red neuronal, sin 
+Estos resultados corresponden a la evaluación de la red neuronal en el conjunto de validación. 
 
-**Proximamente** se vendrán más resultados, además de agregar beam search en la validación de los viajes del conjunto de validación
+**Proximamente** se vendrán más resultados, además de agregar beam search en la validación de los viajes del conjunto de validación. Podría adelantar que el agregar beam search aumentaba el accuracy del modelo en +/- 0.1 puntos. 
 
 Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
 
