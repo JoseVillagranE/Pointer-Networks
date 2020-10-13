@@ -65,8 +65,8 @@ A modo de primer resultado se presentan aquello obtenidos en la resolución de u
 Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
 
 <p align="middle">
-  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Loss.png" height="100%" width="100%" />
-  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Ratio.png" height="100%" width="100%" />
+  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Loss.png" height="50%" width="50%" />
+  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Ratio.png" height="50%" width="50%" />
 </p>
 
 #### Reforzado
