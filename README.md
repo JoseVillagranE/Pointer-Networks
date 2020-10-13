@@ -42,14 +42,17 @@ Además se utilizan las siguientes configuraciones con fines de estudio:
 
 En donde las variables indexadas en la primera columna significan:
 
-* input size: Dimensión de los nodos de entrada. La dimensión minima es dos y no conlleva ningun procesamiento, mientras que para mayores dimensionalides se debe implementar embedding.
-* hidden size: Numero de neurona de la LSTM
-* bidirectional: LSTM bidireccional o no
-* mask_bool: Enmascarar las probabilidades de los nodos ya elegidos.
-* hidden_att_bool: Usar el estado latente del mecanismo de atención
-* first_city_fixed: Añadir un primer nodo fijo para todos lo viajes. Especificamente, [0, 0]
-* C: Parametro que controla el rango de los logits (Bello, et al. 2017). Si es None se utiliza el mecanismo original.
-* normalization loss: Normalización de la función de perdida.
+* **input size**: Dimensión de los nodos de entrada. La dimensión minima es dos y no conlleva ningun procesamiento, mientras que para mayores dimensionalides se debe implementar embedding.
+* **hidden size**: Numero de neurona de la LSTM
+* **bidirectional**: LSTM bidireccional o no
+* **mask_bool**: Enmascarar las probabilidades de los nodos ya elegidos.
+* **hidden_att_bool**: Usar el estado latente del mecanismo de atención
+* **first_city_fixed**: Añadir un primer nodo fijo para todos lo viajes. Especificamente, [0, 0]
+* **C**: Parametro que controla el rango de los logits (Bello, et al. 2017). Si es None se utiliza el mecanismo original.
+* **normalization loss**: Normalización de la función de perdida.
+* **Teachig forcing**: Probabilidad de asignar el correcto nodo a la entrada del decoder en un paso cualquiera sin importar la elección del mecanismo de atención. 
+			Para todos los resultados se asigno cero por lo que no se tabulo. 
+			Pero cabe aclarar que el utilizar esta variable sobreentreno la red neuronal, no pudiendo conseguir resultados destacables en el conjunto de validación. Como justificación se podría pensar en el aprendizaje de patrones incorrectos entre la entrada anterior, la elección por parte del mecanismo de atención y la entreda siguiente del decoder. 
 
 #### Supervisado
 
@@ -61,6 +64,11 @@ A modo de primer resultado se presentan aquello obtenidos en la resolución de u
 | Number of Invalid tours 	| 2451 	| 2699 	| 0 	| 0 	| 0 	| 3442 	| 2440 	| 2314 	|
 |           Avg Tour Length 	| 1.998 	| 1.932 	| 2.6 	| 2.6 	| 0 	| 1.742 	| 1.999 	| * 	|
 | Training time 	| 35:54.53 	| 36:00.00 	| 43:22.41 	| 42:31.77 	| 37:13.89 	| 37:10.23 	| 37:33.9 	| 41:10.55 	|
+
+
+Estos resultados corresponden a la evaluación de la red neuronal, sin 
+
+**Proximamente** se vendrán más resultados, además de agregar beam search en la validación de los viajes del conjunto de validación
 
 Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
 
