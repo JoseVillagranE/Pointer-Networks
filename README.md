@@ -51,17 +51,6 @@ En donde las variables indexadas en la primera columna significan:
 * C: Parametro que controla el rango de los logits (Bello, et al. 2017). Si es None se utiliza el mecanismo original.
 * normalization loss: Normalización de la función de perdida.
 
-Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
-
-```html
-
-<<p align="middle">
-  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Loss.png" width="100" />
-  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Ratio.png" width="100" />
-</p>
-
-```
-
 #### Supervisado
 
 A modo de primer resultado se presentan aquello obtenidos en la resolución de un viaje de 5 nodos.
@@ -73,7 +62,12 @@ A modo de primer resultado se presentan aquello obtenidos en la resolución de u
 |           Avg Tour Length 	| 1.998 	| 1.932 	| 2.6 	| 2.6 	| 0 	| 1.742 	| 1.999 	| * 	|
 | Training time 	| 35:54.53 	| 36:00.00 	| 43:22.41 	| 42:31.77 	| 37:13.89 	| 37:10.23 	| 37:33.9 	| 41:10.55 	|
 
+Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
 
+<p align="middle">
+  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Loss.png" width="100" />
+  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Ratio.png" width="100" />
+</p>
 
 #### Reforzado
 
