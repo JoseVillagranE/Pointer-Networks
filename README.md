@@ -65,13 +65,13 @@ A modo de primer resultado se presentan aquello obtenidos en la resolución de u
 Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
 
 <p align="middle">
-  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Loss.png" height="40%" width="50%" />
-  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Ratio.png" height="40%" width="50%" />
+  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Loss.png" height="50%" width="40%" />
+  <img src="https://github.com/JoseVillagranE/Pointer-Networks/blob/master/Images/Ratio.png" height="50%" width="40%" />
 </p>
 
 A pesar que la red neuronal demuestra aprendizaje, los resultados en sí no son muy alentadores. Citando el paper de Bello en donde mencionan:
 
-"we implement and train a pointer network with supervised learning, similarly to (Vinyals et al., 2015b). While our supervised data 
+".., we implement and train a pointer network with supervised learning, similarly to (Vinyals et al., 2015b). While our supervised data 
 consists of one million optimal tours, we find that our supervised learning results are not as good as those reported in by (Vinyals et al., 2015b). We suspect that learning from optimal tours is harder for
 supervised pointer networks due to subtle features that the model cannot figure out only by looking at given supervised targets"[[2]](#2).
 
@@ -82,7 +82,8 @@ Tampoco pudieron lograr la implementación original. Podría ser que el paper or
 ### Referencias
 <a id="1">[1]</a>
 O. Vinyals, M. Fortunato, and N. Jaitly, “Pointer networks,” in Proc. Adv. Neural Inf. Process. Syst., Montreal, QC, Canada, Dec. 2015, pp. 2692–2700.
-<a id="2">[1]</a>
+
+<a id="2">[2]</a>
 I. Bello, H. Pham, Q. V. Le, M. Norouzi, and S. Bengio, “Neural combinatorial optimization with reinforcement learning,” in Proc. Int. Conf. Learn. Represent., Toulon, France, Apr. 2017, Art. no. 09940.
 
 
