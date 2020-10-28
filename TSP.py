@@ -344,8 +344,8 @@ if __name__ == "__main__":
     
     weights_init(model)
     
-    train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=10)
-    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=10)
+    train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=100)
+    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=100)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
