@@ -92,7 +92,7 @@ def beam_search_decoder(probs, beam_width=3):
         # expand each current candidate
         for i in range(len(sequences)):
             seq, score = sequences[i]
-            for j in range(len(row)):
+            for j in range(len(row) - 1):
                 prob = row[j]
                 if row[j] < 1e-15:
                     prob = row[j] + eps
@@ -103,6 +103,7 @@ def beam_search_decoder(probs, beam_width=3):
         ordered = sorted(all_candidates, key=lambda tup:tup[1])
         # select k best
         sequences = ordered[:beam_width]
+        
     return sequences
 
 

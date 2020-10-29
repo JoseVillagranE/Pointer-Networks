@@ -86,15 +86,19 @@ def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1,
         align_score = align_score.cpu().detach().numpy()
         
         if beam_serch:
-            idxs = np.array(beam_search_decoder(align_score, 3)[0][0])
+            idxs = beam_search_decoder(align_score, 3)[0][0]
+            idxs.append(idxs[0])
         else:
             idxs = idxs.cpu().numpy()
+            idxs = PreProcessOutput(idxs.squeeze())
             
         b_eval_outp_out = b_eval_outp_out.cpu().detach().numpy()
         b_eval_outp_out = b_eval_outp_out.squeeze()
         
-        idxs = PreProcessOutput(idxs.squeeze())
         labels = PreProcessOutput(b_eval_outp_out)
+        
+        # print(f"idxs: {idxs}")
+        # print(f"labels: {labels}")
         
         # Sirve solo si batch_size = 1
         if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
@@ -131,12 +135,12 @@ def eval_model(model, eval_ds, embedding=None, cudaAvailable=False, batchSize=1,
         example = eval_ds.__getitem__(i_tour)
         # ax_ = ax[i]
         ax = fig.add_subplot(n_rows, n_cols, pos[i])
-        plot_one_tour(model, example, embedding, ax, cudaAvailable)
+        plot_one_tour(model, example, embedding, ax, cudaAvailable, beam_search=beam_search)
     
     plt.show()
     
 
-def plot_one_tour(model, example, embedding=None, ax=None, cudaAvailable=False):
+def plot_one_tour(model, example, embedding=None, ax=None, cudaAvailable=False, beam_search=False):
     
     if cudaAvailable:
         model = model.cuda()
@@ -162,6 +166,9 @@ def plot_one_tour(model, example, embedding=None, ax=None, cudaAvailable=False):
     # idxs = np.argmax(align_score, axis=1)
     # idxs = idxs.squeeze()
     # idxs = PreProcessOutput(idxs)
+    if beam_search:
+        idxs = beam_search_decoder(align_score, 3)[0][0]
+        idxs.append(idxs[0])
     # inp = inp[1:, :]
     ax.scatter(inp_copy[:,0], inp_copy[:, 1])
     # plt.plot(inp[:,0], inp[:,1], 'o')
@@ -239,7 +246,6 @@ def training(model, train_ds, eval_ds, embedding=None, cudaAvailable=False, batc
       optimizer.step()
       
       idxs = idxs.detach().cpu().numpy()
-      
       valid_tours += count_valid_tours(idxs)
          
     if writer:
@@ -280,7 +286,7 @@ def training(model, train_ds, eval_ds, embedding=None, cudaAvailable=False, batc
             batch_cnt += 1
             
             idxs = idxs.detach().cpu().numpy()
-      
+            
             valid_tours_eval += count_valid_tours(idxs)
         
         if writer:
@@ -311,16 +317,16 @@ if __name__ == "__main__":
     
     seq_len = 5
     num_layers = 1
-    encoder_input_size = 20
+    encoder_input_size = 2
     rnn_hidden_size = 128
-    batch_size = 10
+    batch_size = 128
     bidirectional = False
     rnn_type = "LSTM"
     embedding_dim = encoder_input_size # Supervised learning not working w/ embeddings
     C = None
     training_type = "Sup"
-    nepoch = 1
-    lr = 1e-3
+    nepoch = 20
+    lr = 1
     Teaching_Forcing = 0 #  =1 completamente supervisado
     freqEval = 2
     step_lr=20
@@ -331,7 +337,7 @@ if __name__ == "__main__":
     dropout = 0
     optimizer = "SGD"
     clip_norm=2.0
-    f_city_fixed=True
+    f_city_fixed=False
     beam_search = True
     
     save_model_name = name_creation("pt", training_type, seq_len, rnn_hidden_size, batch_size,
@@ -345,7 +351,7 @@ if __name__ == "__main__":
     weights_init(model)
     
     train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=100)
-    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=100)
+    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
     
     print("Train data size: {}".format(len(train_ds)))
     print("Eval data size: {}".format(len(eval_ds)))
@@ -361,20 +367,20 @@ if __name__ == "__main__":
     
     embedding=None
     if embedding_dim > 2:
-      embedding = nn.Linear(2, embedding_dim, bias=True)
+      embedding = nn.Linear(2, embedding_dim, bias=False)
     
       if cudaAvailable:
         embedding = embedding.cuda()
     
     # Entrenamiento del modelo
-    TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model,
-                                      train_ds, eval_ds, embedding=embedding, 
-                                      cudaAvailable=cudaAvailable,
-                                      nepoch=nepoch, 
-                                      model_file=save_model_name, batchSize=batch_size,
-                                      lr=lr, optimizer=optimizer, clip_norm=clip_norm,
-                                      Teaching_Forcing=Teaching_Forcing, norm=norm,
-                                      writer=writer)
+    # TrainingLoss, EvalLoss, list_valid_tours, list_valid_tours_eval = training(model,
+    #                                   train_ds, eval_ds, embedding=embedding, 
+    #                                   cudaAvailable=cudaAvailable,
+    #                                   nepoch=nepoch, 
+    #                                   model_file=save_model_name, batchSize=batch_size,
+    #                                   lr=lr, optimizer=optimizer, clip_norm=clip_norm,
+    #                                   Teaching_Forcing=Teaching_Forcing, norm=norm,
+    #                                   writer=writer)
     # Evaluación del modelo en un conjunto de evaluación
     eval_model(model, eval_ds, embedding=embedding, cudaAvailable=cudaAvailable,
                n_plt_tours=9, n_cols=3, beam_serch=beam_search)
