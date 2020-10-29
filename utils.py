@@ -87,14 +87,15 @@ def beam_search_decoder(probs, beam_width=3):
     eps = 1e-7
     sequences = [[list(), 0.0]]
     # walk over each step in sequence
-    for row in probs:
+    for row_ in range(probs.shape[1] - 1):
+        row = probs[:, row_]
         all_candidates = list()
         # expand each current candidate
         for i in range(len(sequences)):
             seq, score = sequences[i]
-            for j in range(len(row) - 1):
+            for j in range(row.shape[0]):
                 prob = row[j]
-                if row[j] < 1e-15:
+                if prob < 1e-15:
                     prob = row[j] + eps
                 if j not in seq:
                     candidate = [seq + [j], score - math.log(prob)]
@@ -103,7 +104,7 @@ def beam_search_decoder(probs, beam_width=3):
         ordered = sorted(all_candidates, key=lambda tup:tup[1])
         # select k best
         sequences = ordered[:beam_width]
-        
+    
     return sequences
 
 
