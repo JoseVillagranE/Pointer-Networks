@@ -34,7 +34,8 @@ def count_valid_tours(idxs, axis=1):
     idxs -> [seq_len, batch]
     """
     valid_tours = 0
-    for i in range(idxs.shape[0]):
+    for i in range(idxs.shape[1]):
+        
         idx_i = idxs[:, i]
         idx_i_unique = np.unique(idx_i)
         if idx_i.shape[0] == idx_i_unique.shape[0] + 1 and idx_i[0] == idx_i[-1]:
@@ -109,18 +110,19 @@ if __name__ == "__main__":
     
     # ------------------- Debug for compute_len_tour and count valid tours ----------------
     
-    # tour = np.random.rand(1, 5, 2)
-    # print("Tour:", tour)
+    tour = np.random.rand(1, 5, 2)
+    print("Tour:", tour)
     
-    # idxs = [0, 3, 2, 1, 4]
+    idxs = [0, 3, 2, 1, 4]
     
-    # len_tour = compute_len_tour(tour, idxs)
-    # print("Len tour: ", len_tour)
+    len_tour = compute_len_tour(tour, idxs)
+    print("Len tour: ", len_tour)
     
-    # idxs = np.array([[1, 1, 1], [1, 2, 3], [1, 2, 2]])
+    idxs = np.array([[1, 1, 1, 1], [1, 2, 3, 1], [1, 2, 2, 3]])
+    print(idxs)
     
-    # valid_tours = count_valid_tours(idxs)
-    # print("Valid Tours: ", valid_tours)
+    valid_tours = count_valid_tours(idxs)
+    print("Valid Tours: ", valid_tours)
     
     # -------------------------------------------------------------------------------------
     
@@ -141,13 +143,13 @@ if __name__ == "__main__":
     
     # -------------------------Debug for Beam Search -----------------------------------------------
     
-    data = [[1e-55, 0.2, 0.3, 0.4, 0.5],
-		[0.1, 0.2, 0.3, 0.4, 0.5],
-		[0.5, 0.4, 0.3, 0.2, 0.1]]
-    data = np.array(data)
-    # decode sequence
-    result = beam_search_decoder(data, 3)
-    # print result
-    for seq in result:
-    	print(seq)
+#     data = [[1e-55, 0.2, 0.3, 0.4, 0.5],
+# 		[0.1, 0.2, 0.3, 0.4, 0.5],
+# 		[0.5, 0.4, 0.3, 0.2, 0.1]]
+#     data = np.array(data)
+#     # decode sequence
+#     result = beam_search_decoder(data, 3)
+#     # print result
+#     for seq in result:
+#     	print(seq)
     
