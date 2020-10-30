@@ -68,7 +68,12 @@ A modo de primer resultado se presentan aquello obtenidos en la resolución de u
 
 Estos resultados corresponden a la evaluación de la red neuronal en el conjunto de validación. 
 
-**Proximamente** se vendrán más resultados, además de agregar beam search en la validación de los viajes del conjunto de validación. Podría adelantar que el agregar beam search aumentaba el accuracy del modelo en +/- 0.1 puntos. 
+Con el objetivo de mejorar los resultados de precisión en los viajes predichos, se implementa beam search para aumentar la cantidad de viajes validos. Aunque esto trae consigo el aumento del largo promedio de los viajes. Los resultados se presentan a continuación:
+
+| Configuración del modelo 	| 1 	| 2 	| 3 	| 4 	| 5 	| 6 	| 7 	| 8 	|
+|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|
+| Accuracy 	| 0.604 	| 0.606 	| 0.512 	| * 	| * 	| 0.556 	| 0.604 	| 0.586 	|
+| Avg Tour Length 	| 2.602 	| 2.602 	| 2.602 	| * 	| * 	| 2.692 	| 2.602 	| 2.602 	|
 
 Además se incluyen las siguientes curvas de perdida y radio de viajes validos:
 
