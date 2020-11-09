@@ -109,8 +109,10 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         if bidirectional:
             hidden_size *= 2
         
-        self.attention = Attention(hidden_size, C=C)
-        self.glimpse = Attention(hidden_size, C=C)
+        self.attention = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
+                                   C=C, is_cuda_available=torch.cuda.is_available())
+        self.glimpse = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
+                                   C=C, is_cuda_available=torch.cuda.is_available())
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         self.decoder = nn.LSTM(input_size, hidden_size)
@@ -157,12 +159,12 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
                     dec_outp = dec_outp.unsqueeze(0).transpose(0, 1)
             # align_score -> [batch, seq_len, 1]
             dec_inp = dec_inp.transpose(0, 1)
-            _, align_score, mask = self.attention(memory_bank,
+            align_score, logits, mask = self.attention(memory_bank,
                                                   hidden[0].transpose(0, 1), 
                                                   mask, idxs) # align_score -> [batch_size, #nodes]
             align_score = align_score.squeeze()
-            idxs = align_score.multinomial(num_samples=1).squeeze()
-            # idxs = torch.argmax(align_score, dim=1)
+            #idxs = align_score.multinomial(num_samples=1).squeeze()
+            idxs = torch.argmax(align_score, dim=1)
             for old_idxs in selections:
                 if old_idxs.eq(idxs).data.any():
                     idxs = align_score.multinomial(num_samples=1).squeeze()
