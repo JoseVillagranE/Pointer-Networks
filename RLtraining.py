@@ -107,7 +107,7 @@ class NeuronalOptm:
     def __init__(self, input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                  embedding_dim, hidden_dim_critic, process_block_iter,
                  inp_len_seq, lr, C=None, batch_size=10, T=1, training_type="RL", actor_decay_rate=0.96,
-                 critic_decay_rate=0.99, step_size=50):
+                 critic_decay_rate=0.99, step_size=5000):
         
         super().__init__()
         self.model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim,
@@ -239,7 +239,6 @@ class NeuronalOptm:
             list_of_actor_loss.append(actor_total_loss/batch_cnt)
             list_of_critic_loss.append(critic_total_loss/batch_cnt)
             list_of_tour_length_mean.append(tour_length_total/batch_cnt)
-            # eval_model(self.model, self.embedding, eval_ds, self.is_cuda_available, self.batch_size)
             
         
         torch.save(self.model.state_dict(), save_model_file)
@@ -347,15 +346,18 @@ if __name__ == "__main__":
     hidden_dim_critic = rnn_hidden_size
     process_block_iter = 1
     inp_len_seq = seq_len
-    lr = 1e-2
+    lr = 1e-3
     C = 10 # Logit clipping
     T = 1 # Temperature Hyperparameter
     batch_size = 512
     n_epoch = 1
     steps = 1
+    step_size = 5000 # LR decay
     embedding_dim = 128 #d-dimensional embedding dim
     embedding_dim_critic = embedding_dim
+    
     f_city_fixed=False
+    
     beam_search = None
     
     save_model_file="RLPointerModel_TSP5.pt"
@@ -370,7 +372,7 @@ if __name__ == "__main__":
     
     trainer = NeuronalOptm(input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
-                           C=C, batch_size=batch_size, T=T)
+                           C=C, batch_size=batch_size, T=T, step_size=step_size)
     
     Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
                                                                                         save_model_file=save_model_file,
