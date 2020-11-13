@@ -8,6 +8,7 @@ Created on Sat Mar 28 22:12:13 2020
 import numpy as np
 from torch.utils.data import Dataset
 from copy import copy # shallow copy. copy dont change the old list
+from utils import get_batch_nodes
 
 class TSPDataset(Dataset):
     
@@ -77,9 +78,9 @@ class TSPDataset(Dataset):
                     outp_out = [0] + outp_out + [0]
                     outp_len += 2
                 else:
-                    outp_out += [outp_out[0]]
+                    # outp_out += [outp_out[0]]
                     outp_out = outp_out - np.ones_like(outp_out)
-                    outp_len += 1
+                    # outp_len += 1
                 
                 outp_out = np.array(outp_out)
                 outp_len = np.array([outp_len])
@@ -96,7 +97,18 @@ class TSPDataset(Dataset):
     def __getitem__(self, index):
         inp, inp_len, outp_in, outp_out, outp_len = self.data[index]
         return inp, inp_len, outp_in, outp_out, outp_len            
-                
+
+
+
+class Generator(Dataset):
+	def __init__(self, n_samples, city_t):
+		self.data = get_batch_nodes(n_samples, city_t)
+		
+	def __getitem__(self, idx):
+		return self.data[idx]
+
+	def __len__(self):
+		return self.data.size(0)
 
 if __name__=="__main__":
     train_ds = TSPDataset("./CH_TSP_data/tsp5.txt", f_city_fixed=True, lineCountLimit=5)

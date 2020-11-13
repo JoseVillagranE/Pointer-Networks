@@ -29,17 +29,22 @@ class CriticNetwork(nn.Module):
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.process_block_iter = process_block_iter
-#        self.inp_len = inp_len
         
-        self.encoder = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
-                                  hidden_dim, dropout)
+        # self.encoder = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
+        #                           hidden_dim, dropout)
+        self.encoder = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True)
         # self.process_block = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
         #                           hidden_dim, dropout)
         self.process_block = nn.LSTM(embedding_dim, hidden_dim, batch_first = True)
         self.attending = Attention(hidden_dim, mask_bool=True, hidden_att_bool=False,
                                    C=None, is_cuda_available=is_cuda_available)
-        self.decoder = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
-                                     nn.Linear(hidden_dim, 1))
+        self.decoder = nn.Sequential(nn.Linear(hidden_dim, hidden_dim, bias=False),
+                                     nn.ReLU(),
+                                     nn.Linear(hidden_dim, 1, bias=False))
+        
+        
+        self.embedding = nn.Linear(2, embedding_dim, bias=False)
+        self.dec_input = nn.Parameter(torch.FloatTensor(embedding_dim))
         
         self.sm = nn.Softmax()
         
@@ -50,11 +55,12 @@ class CriticNetwork(nn.Module):
             self.encoder = self.encoder.cuda()
             self.process_block = self.process_block.cuda()
             self.decoder = self.decoder.cuda()
+            self.embedding = self.embedding.cuda()
             
         
         
         
-    def forward(self, inp, inp_len):
+    def forward(self, inp):
         
         '''
         input:
@@ -64,28 +70,21 @@ class CriticNetwork(nn.Module):
             outp: Baseline calculado por el critic.
         
         '''
-        inp = inp.transpose(0, 1)
-        (encoder_hx, encoder_cx) = self.encoder.enc_init_state
-        encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
-        encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
         
-        memory_bank, (hidden, c_n) = self.encoder(inp, inp_len, (encoder_hx, encoder_cx))
-        memory_bank = memory_bank.transpose(0, 1) # [batch_size, seq_len, hidden_size]
-        # hidden = hidden.transpose(0, 1) # [batch_size, 1, hidden_size]
+        inp = self.embedding(inp) # [batch, seq_len, hidden_dim]
+        # (encoder_hx, encoder_cx) = self.encoder.enc_init_state
+        # encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
+        # encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
         
-        dec_input = torch.rand(memory_bank.shape[0], 1, inp.shape[2])
+        enc_inp, (hidden, c_n) = self.encoder(inp, None)
+        dec_input = self.dec_input.unsqueeze(0).repeat(enc_inp.shape[0],1) # [batch, emb_dim]
         if torch.cuda.is_available(): dec_input = dec_input.cuda()
-        
-        dec_final = torch.tensor([0])
-        for i in range(memory_bank.shape[1]):
-            memory_bank_pr, (hidden, c_n) = self.process_block(dec_input, (hidden, c_n))
+        for i in range(inp.shape[1]):
+            _, (hidden, c_n) = self.process_block(dec_input.unsqueeze(1), (hidden, c_n))
             for j in range(self.process_block_iter):
-                align_score, _, _ = self.attending(memory_bank, hidden.transpose(0, 1),
+                g_l, align_score, _, _ = self.attending(enc_inp, hidden.squeeze(),
                                                    None, None)
-                # dec_i1 = torch.bmm(align_score, memory_bank)
-                dec_final = torch.einsum('bc,bch->bh', align_score.squeeze(1), memory_bank)
-                dec_final = dec_final.unsqueeze(1)
-        outp = self.decoder(dec_final)
+        outp = self.decoder(g_l).squeeze()
         return outp
         
         

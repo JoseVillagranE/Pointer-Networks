@@ -6,6 +6,16 @@ Created on Fri Aug 14 15:53:35 2020
 """
 import numpy as np
 import math
+import torch
+
+def get_batch_nodes(n_samples, city_t, seed = None):
+	'''
+	return nodes:(batch,city_t,2)
+	'''
+	if seed is not None:
+		torch.manual_seed(seed)
+	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+	return torch.rand((n_samples, city_t, 2), device = device)
 
 def compute_len_tour(tour, idxs):
     """

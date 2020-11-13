@@ -102,22 +102,24 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
 
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, C=None, n_glimpses=0):
+        input_size, hidden_size, dropout, batch_size, C=None, n_glimpses=1):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         
         if bidirectional:
             hidden_size *= 2
         
-        self.attention = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
+        self.pointing = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
                                    C=C, is_cuda_available=torch.cuda.is_available())
-        self.glimpse = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
+        self.attending = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
                                    C=C, is_cuda_available=torch.cuda.is_available())
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
-        self.decoder = nn.LSTM(input_size, hidden_size)
+        self.decoder = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.dec_input = nn.Parameter(torch.FloatTensor(input_size))
         
-    def forward(self, dec_inp_b, inp, memory_bank, hidden):
+        
+    def forward(self, inp, memory_bank, hidden):
         
         """
         
@@ -135,50 +137,31 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         align_scores = []
         mask = None
         idxs = None
-        dec_inp = dec_inp_b.unsqueeze(0) # [1, batch_size, hidden_size]. idx=0 -> token <g>
-        for i in range(inp.shape[0]):
-            dec_outp, hidden = self.decoder(dec_inp, hidden) #[seq_len=1, batch, hidden_size]
-            if i == 0:
-                memory_bank = memory_bank.transpose(0, 1) #[batch_size, seq_len, hidden_size]
-            dec_outp = dec_outp.transpose(0, 1)# [batch_size, 1, hidden_size]
+        dec_inp = self.dec_input.unsqueeze(0).repeat(inp.shape[0],1).cuda() # [batch_size, emb_size]. idx=0 -> token <g>
+        for i in range(inp.shape[1]):
+            _, hidden = self.decoder(dec_inp.unsqueeze(1), hidden) #[batch, 1, hidden_size]
+            g_l = hidden[0].squeeze(0) # query [batch, hidden_size] 
             for j in range(self.n_glimpses):
-                _, align_score, _ = self.glimpse(memory_bank,
-                                                 hidden[0].unsqueeze(0).transpose(0, 1),
-                                                 None, None)
-                if len(align_score.size())==1:
-                    # dec_outp = torch.bmm(align_score, memory_bank)
-                    dec_outp = torch.einsum('bc,bch->bh', align_score.squeeze(1), memory_bank)
-                    dec_outp = dec_outp.unsqueeze(0)
-                    # dec_outp = dec_outp.transpose(1, 2)
-                    
-                    if j == self.n_glimpses - 1:
-                        dec_outp = dec_outp.transpose(1, 2)
-                else:
-                    # dec_outp = torch.bmm(align_score, memory_bank)
-                    dec_outp = torch.einsum('bc,bch->bh', align_score.squeeze(1), memory_bank)
-                    dec_outp = dec_outp.unsqueeze(0).transpose(0, 1)
-            # align_score -> [batch, seq_len, 1]
-            dec_inp = dec_inp.transpose(0, 1)
-            align_score, logits, mask = self.attention(memory_bank,
-                                                  hidden[0].transpose(0, 1), 
-                                                  mask, idxs) # align_score -> [batch_size, #nodes]
-            align_score = align_score.squeeze()
-            #idxs = align_score.multinomial(num_samples=1).squeeze()
-            idxs = torch.argmax(align_score, dim=1)
+                g_l, align_score, _, mask = self.attending(memory_bank, g_l, mask)
+            dec_inp, align_score, logits, mask = self.pointing(memory_bank, g_l, mask, idxs) # align_score -> [batch_size, #nodes]
+            
+            idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
+            #idxs = torch.argmax(align_score, dim=1)
             for old_idxs in selections:
                 if old_idxs.eq(idxs).data.any():
-                    idxs = align_score.multinomial(num_samples=1).squeeze()
+                    idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
                     break
             selections.append(idxs)
             align_scores.append(align_score)
-            dec_inp = inp[idxs.data, [j for j in range(dec_inp_b.shape[0])],:].unsqueeze(0)
+            #dec_inp = inp[[j for j in range(inp.shape[0])], idxs.data,:]
+            
         
-        if inp.shape[0]:
+        if inp.shape[0] == 1:
+            selections = torch.stack(selections, dim=0)
+            align_scores = torch.stack(align_scores, dim=0)
+        else:
             selections = torch.stack(selections, dim=1)
             align_scores = torch.stack(align_scores, dim=1)
-        else:
-            selections = torch.stack(selections, dim=1).transpose(0, 1)
-            align_scores = torch.stack(align_scores, dim=1).transpose(0, 1)
 
         return align_scores, selections, hidden
         
@@ -198,9 +181,17 @@ class PointerNet(nn.Module):
         mask_bool=False, hidden_att_bool=False, training_type="Sup", C=None, 
         is_cuda_available = False):
         super().__init__()
-        self.encoder = RNNEncoder(rnn_type, bidirectional,num_layers, encoder_input_size,
-                                  rnn_hidden_size, dropout)
+        # self.encoder = RNNEncoder(rnn_type, bidirectional,num_layers, encoder_input_size,
+        #                           rnn_hidden_size, dropout)
+        self.encoder = nn.LSTM(encoder_input_size, rnn_hidden_size, num_layers, batch_first=True)
         self.training_type = training_type
+        
+        
+        self.embedding = nn.Linear(2, encoder_input_size, bias=False)
+        
+        if is_cuda_available:
+            self.embedding = self.embedding.cuda()
+        
         if training_type == "Sup":
             self.decoder = PointerNetRNNDecoder(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size,
@@ -213,9 +204,9 @@ class PointerNet(nn.Module):
                                     dropout, batch_size, C=C)
          
       
-    def forward(self, inp, inp_len, outp, outp_len, Teaching_Forcing=0):
+    def forward(self, inp, inp_len=None, outp=None, outp_len=None, Teaching_Forcing=0):
         
-        inp = inp.transpose(0, 1) # [batch, seq_len, emb_size] before transpose
+        inp = self.embedding(inp) # [batch, seq_len, emb_size]
         
         if self.training_type == "Sup":
             outp = outp.transpose(0, 1)# [seq_len, batch, emb_size]
@@ -225,15 +216,15 @@ class PointerNet(nn.Module):
             return align_score, logits, idxs
         elif self.training_type == "RL":
             
-            (encoder_hx, encoder_cx) = self.encoder.enc_init_state
-            encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
-            encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
+            # (encoder_hx, encoder_cx) = self.encoder.enc_init_state
+            # encoder_hx = encoder_hx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)       
+            # encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
             # memory_bank -> [seq_len, batch, hidden_size]
             # hidden_0 -> [1, batch, hidden_size]
             
-            memory_bank, hidden_final = self.encoder(inp, inp_len, (encoder_hx, encoder_cx))
-            align_score, idxs, dec_memory_bank  = self.decoder(outp, inp, memory_bank, hidden_final)
-            return align_score, memory_bank, dec_memory_bank, idxs
+            enc_outp, enc_hidden = self.encoder(inp, None)
+            probs, idxs, dec_outp  = self.decoder(inp, enc_outp, enc_hidden)
+            return probs, enc_outp, dec_outp, idxs
         
 
 def sequence_mask(lengths, max_len=None):

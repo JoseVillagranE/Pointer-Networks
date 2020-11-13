@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 import math
 
-def apply_mask(align_score, mask, prev_idxs):
+def apply_mask(align_score, mask, prev_idxs=None):
     """ apply mask for shutdown previous indexs that already chose
     Args:
     align_score : scores
@@ -22,10 +22,11 @@ def apply_mask(align_score, mask, prev_idxs):
     
     mask_ = mask.clone()
     if prev_idxs is not None:
-        # [prev_idxs[i] for i in range(prev_idxs.shape[0])]
-        mask_[[x for x in range(align_score.size(0))],:, prev_idxs.data] = 1
+        mask_[[x for x in range(align_score.size(0))], prev_idxs.data] = 1
         align_score[mask_] = -np.inf
+        
     return align_score, mask_
+    
 class Attention(nn.Module):
     """ Attention layer
     Args:
@@ -39,45 +40,45 @@ class Attention(nn.Module):
         self.C = C
         self.tanh = nn.Tanh()
         
-        self.W_ref = nn.Linear(hidden_dim, hidden_dim, bias=False) # En el paper es matriz. Revisar!
-        self.W_q = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        self.v = nn.Linear(hidden_dim, 1, bias=False)
+        self.W_ref = nn.Conv1d(hidden_dim, hidden_dim, 1, 1)
+        self.W_q = nn.Linear(hidden_dim, hidden_dim, bias=True)
         if is_cuda_available:
             self.W_ref = self.W_ref.cuda()
             self.W_q = self.W_q.cuda()
-            self.v = self.v.cuda()
+            self.V = nn.Parameter(torch.cuda.FloatTensor(hidden_dim))
+        
+        else:
+            self.V = nn.Parameter(torch.FloatTensor(hidden_dim)).cuda()
+            
+            
     def forward(self, src, tgt, mask=None, prev_idxs=None):
         """
         Args:
         src : source values (bz, seq_len, hidden_dim). Hidden state of encoder
         
-        tgt : target values (bz, 1, hidden_dim). dec_i or q 
+        tgt : target values (bz, hidden_dim). dec_i or q 
         src_lengths : source values length
         """
-        temp = self.tanh(self.W_q(tgt) + self.W_ref(src))
-        u = self.v(temp).transpose(1, 2)
+        u1 = self.W_q(tgt).unsqueeze(-1).repeat(1, 1, src.shape[1])
+        u2 = self.W_ref(src.permute(0, 2, 1)) # [Batch, hidden_dim, seq_len]
+        V = self.V.unsqueeze(0).unsqueeze(0).repeat(src.shape[0], 1, 1)
+        u = torch.bmm(V, self.tanh(u1 + u2)).squeeze(1) # [Batch, 1, hidden] x [Batch, hidden_dim, seq_len]
+        
         if self.C:
             logit = self.C*self.tanh(u)
         else:
             logit = u
-        
         if self.mask_bool: 
             logit, mask = apply_mask(logit, mask, prev_idxs)
         # Normalize weights
-        # print(logit)
-        probs = F.softmax(logit, -1) # [batch, 1, seq_len]
-        
+        probs = F.softmax(logit, -1) # [batch, seq_len]
+        d_prime= torch.bmm(u2, probs.unsqueeze(-1)).squeeze(-1) # [batch, hidden_size]
         if self.hidden_att_bool:
-            # probs = probs.transpose(1,2)
-            # d = probs*src # pointer network paper
-            d_prime= torch.bmm(probs, src)
-            # d = d.sum(dim=2)
-            # concat_d = torch.cat([d.unsqueeze(1), tgt], -1)
             concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))
             
             return concat_d, probs, logit, mask
         else:
-            return probs, logit, mask # [batch_size, hidden_dim, embedding_dim], [batch_size, 1, embedding_dim]
+            return d_prime, probs.squeeze(), logit, mask
     
     
 if __name__ == "__main__":
