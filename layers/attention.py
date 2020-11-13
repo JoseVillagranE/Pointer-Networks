@@ -33,11 +33,12 @@ class Attention(nn.Module):
       dim : hidden dimension size
     """
     def __init__(self, hidden_dim, mask_bool=False, hidden_att_bool=False,
-                 C=None, is_cuda_available=False):
+                 C=None, T=1, is_cuda_available=False):
         super().__init__()
         self.mask_bool = mask_bool
         self.hidden_att_bool = hidden_att_bool
         self.C = C
+        self.T = T
         self.tanh = nn.Tanh()
         
         self.W_ref = nn.Conv1d(hidden_dim, hidden_dim, 1, 1)
@@ -71,7 +72,7 @@ class Attention(nn.Module):
         if self.mask_bool: 
             logit, mask = apply_mask(logit, mask, prev_idxs)
         # Normalize weights
-        probs = F.softmax(logit, -1) # [batch, seq_len]
+        probs = F.softmax(logit/self.T, -1) # [batch, seq_len]
         d_prime= torch.bmm(u2, probs.unsqueeze(-1)).squeeze(-1) # [batch, hidden_size]
         if self.hidden_att_bool:
             concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))

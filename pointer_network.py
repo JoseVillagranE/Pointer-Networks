@@ -102,7 +102,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
 
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, C=None, n_glimpses=1):
+        input_size, hidden_size, dropout, batch_size, C=None, T=1, n_glimpses=1):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         
@@ -110,9 +110,9 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             hidden_size *= 2
         
         self.pointing = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
-                                   C=C, is_cuda_available=torch.cuda.is_available())
+                                   C=C, T=T, is_cuda_available=torch.cuda.is_available())
         self.attending = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
-                                   C=C, is_cuda_available=torch.cuda.is_available())
+                                   C=C, T=T, is_cuda_available=torch.cuda.is_available())
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         self.decoder = nn.LSTM(input_size, hidden_size, batch_first=True)
@@ -178,7 +178,7 @@ class PointerNet(nn.Module):
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
         encoder_input_size, rnn_hidden_size, dropout=0, batch_size=128, 
-        mask_bool=False, hidden_att_bool=False, training_type="Sup", C=None, 
+        mask_bool=False, hidden_att_bool=False, training_type="Sup", C=None, T=1, 
         is_cuda_available = False):
         super().__init__()
         # self.encoder = RNNEncoder(rnn_type, bidirectional,num_layers, encoder_input_size,
@@ -201,7 +201,7 @@ class PointerNet(nn.Module):
         elif training_type == "RL":
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size,
-                                    dropout, batch_size, C=C)
+                                    dropout, batch_size, C=C, T=T)
          
       
     def forward(self, inp, inp_len=None, outp=None, outp_len=None, Teaching_Forcing=0):

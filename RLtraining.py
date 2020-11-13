@@ -35,8 +35,7 @@ warnings.filterwarnings("ignore")
 
 layers_of_interest = ["Linear", "Conv1d"]
 
-def weights_init(module, a=-0.08, b=0.08):
-    
+def weights_init(module, a=-0.08, b=0.08):    
     """
     input:
         Module -> Neural Network Module
@@ -107,13 +106,13 @@ class NeuronalOptm:
     
     def __init__(self, input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                  embedding_dim, hidden_dim_critic, process_block_iter,
-                 inp_len_seq, lr, C=None, batch_size=10, training_type="RL", actor_decay_rate=0.96,
+                 inp_len_seq, lr, C=None, batch_size=10, T=1, training_type="RL", actor_decay_rate=0.96,
                  critic_decay_rate=0.99, step_size=50):
         
         super().__init__()
         self.model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim,
                        rnn_hidden_size, batch_size=batch_size,
-                       training_type=training_type, C=C)
+                       training_type=training_type, C=C, T=T)
         
         self.model.apply(weights_init)
         
@@ -261,6 +260,7 @@ class NeuronalOptm:
         device = 'cuda:0' if torch.cuda.is_available else 'cpu'
         self.model = self.model.eval().to(device)
         countAcc = 0
+        tour_len = 0 
         eval_dl = DataLoader(eval_ds, num_workers=0, batch_size=batch_size, shuffle=True)
         for b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_out, b_eval_outp_len in eval_dl:
         
@@ -271,13 +271,19 @@ class NeuronalOptm:
         
             align_score, _, _, idxs = self.model(b_eval_inp)
             align_score = align_score.cpu().detach().numpy()
-            idxs = idxs.cpu().detach().numpy()
+            idxs_ = idxs.cpu().detach().numpy().copy()
             labels = b_eval_outp_out.cpu().detach().numpy().squeeze()
-            if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs, labels), True):
+            if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs_, labels), True):
                 countAcc += 1
+            sample_solution = tensor_sort(b_eval_inp, idxs.unsqueeze(0), dim=1).to(device)
+            tour_len += Reward(sample_solution, True).cpu().detach().numpy()
+            
     
         Acc = countAcc/eval_ds.__len__()
+        tour_len_mean = tour_len[0]/eval_ds.__len__()
         print("The Accuracy of the model is: {}".format(Acc))
+        print("Total Number of Tours: {}".format(eval_ds.__len__()))
+        print("Avg Tour Length: {:.3f}".format(tour_len_mean))
         
         
     
@@ -343,8 +349,9 @@ if __name__ == "__main__":
     inp_len_seq = seq_len
     lr = 1e-2
     C = 10 # Logit clipping
+    T = 1 # Temperature Hyperparameter
     batch_size = 512
-    n_epoch=1
+    n_epoch = 1
     steps = 1
     embedding_dim = 128 #d-dimensional embedding dim
     embedding_dim_critic = embedding_dim
@@ -363,7 +370,7 @@ if __name__ == "__main__":
     
     trainer = NeuronalOptm(input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
-                           C=C, batch_size=batch_size)
+                           C=C, batch_size=batch_size, T=T)
     
     Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
                                                                                         save_model_file=save_model_file,
