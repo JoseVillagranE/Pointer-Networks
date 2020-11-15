@@ -48,14 +48,12 @@ class CriticNetwork(nn.Module):
         
         self.sm = nn.Softmax()
         
-        self.is_cuda_available = is_cuda_available
+        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         
-        
-        if is_cuda_available:
-            self.encoder = self.encoder.cuda()
-            self.process_block = self.process_block.cuda()
-            self.decoder = self.decoder.cuda()
-            self.embedding = self.embedding.cuda()
+        self.encoder = self.encoder.to(self.device)
+        self.process_block = self.process_block.to(self.device)
+        self.decoder = self.decoder.to(self.device)
+        self.embedding = self.embedding.to(self.device)
             
         
         
@@ -77,8 +75,7 @@ class CriticNetwork(nn.Module):
         # encoder_cx = encoder_cx.unsqueeze(0).repeat(inp.size(1), 1).unsqueeze(0)
         
         enc_inp, (hidden, c_n) = self.encoder(inp, None)
-        dec_input = self.dec_input.unsqueeze(0).repeat(enc_inp.shape[0],1) # [batch, emb_dim]
-        if torch.cuda.is_available(): dec_input = dec_input.cuda()
+        dec_input = self.dec_input.unsqueeze(0).repeat(enc_inp.shape[0],1).to(self.device) # [batch, emb_dim]
         for i in range(inp.shape[1]):
             _, (hidden, c_n) = self.process_block(dec_input.unsqueeze(1), (hidden, c_n))
             for j in range(self.process_block_iter):

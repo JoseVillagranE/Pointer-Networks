@@ -50,7 +50,7 @@ def weights_init(module, a=-0.08, b=0.08):
 
 
 
-def Reward(sample_solution, is_cuda_available=False):
+def Reward(sample_solution, device='cpu'):
     '''
     input:
         sample_solution: tensor que contiene la solución de un tour ([batch, seq_len, 2])
@@ -60,8 +60,7 @@ def Reward(sample_solution, is_cuda_available=False):
     '''
     batch_size, n_nodes, _ = sample_solution.size()
     tour_length = torch.zeros([batch_size])
-    if is_cuda_available:
-        tour_length = tour_length.cuda()
+    tour_length = tour_length.to(device)
     
     for i in range(n_nodes-1):
         tour_length += torch.norm(sample_solution[:, i] - sample_solution[:, i+1], p=2, dim=1)
@@ -141,10 +140,10 @@ class NeuronalOptm:
         # self.dec_0 = self.dec_0.unsqueeze(0).repeat(batch_size, 1)
         
         
-        self.is_cuda_available = torch.cuda.is_available()
+        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         
         self.critic = CriticNetwork(rnn_type, num_layers, bidirectional, embedding_dim,
-                                    hidden_dim_critic, process_block_iter, batch_size, C=C, is_cuda_available=self.is_cuda_available)
+                                    hidden_dim_critic, process_block_iter, batch_size, C=C)
         
         self.critic.apply(weights_init)
         
@@ -158,10 +157,9 @@ class NeuronalOptm:
                                                               gamma=critic_decay_rate)
         
         
-        if self.is_cuda_available:
-            self.model = self.model.cuda()
-            self.critic = self.critic.cuda()
-            self.dec_0 = self.dec_0.cuda()
+        self.model = self.model.to(self.device)
+        self.critic = self.critic.to(self.device)
+        self.dec_0 = self.dec_0.to(self.device)
             
         
     def step(self, batch_inp, clip_norm=1.0):
@@ -171,7 +169,7 @@ class NeuronalOptm:
         sample_solution = tensor_sort(batch_inp, idxs, dim=1).squeeze() # [batch, seq_len, 2]
         sample_probs = tensor_sort(align_score, idxs, dim=2).squeeze() # [batch, seq_len]
         
-        tour_length = Reward(sample_solution, self.is_cuda_available) #[batch]
+        tour_length = Reward(sample_solution, self.device) #[batch]
         
         log_probs = torch.log(sample_probs).sum(dim=1)
         
@@ -198,47 +196,57 @@ class NeuronalOptm:
         return actor_loss_item, critic_loss_item, tour_length_mean
     
     def training(self, train_ds, eval_ds, attention_size=128, beam_width=2,
-                 lr=1e-3, clip_norm=1.0, weight_decay=0.1, nepoch = 50, 
-                 save_model_file="RLPointerModel.pt", freqEval=5):
+                 lr=1e-3, clip_norm=1.0, weight_decay=0.1, step_log=10, val_step=1000,
+                 save_model_file="RLPointerModel.pt"):
         
         
         t0 = time()
   
         train_dl = DataLoader(train_ds, batch_size=self.batch_size)
-        # eval_dl = DataLoader(eval_ds, batch_size=self.batch_size)
+        eval_dl = DataLoader(eval_ds, batch_size=self.batch_size)
 
         
         list_of_actor_loss = []
         list_of_critic_loss = []
         list_of_tour_length_mean = []
-        for epoch in range(nepoch):
-            
-            self.model = self.model.train()
-            self.critic = self.critic.train()
-            actor_total_loss = 0.
-            critic_total_loss = 0.
-            tour_length_total = 0.
-            batch_cnt = 0.
-            steps = 0
-            for step, b_inp in enumerate(train_dl):
-                b_inp = Variable(b_inp)
+        self.model = self.model.train()
+        self.critic = self.critic.train()
+        actor_total_loss = 0.
+        critic_total_loss = 0.
+        total_tour_length = 0.
+        for step, b_inp in enumerate(train_dl):
+            b_inp = Variable(b_inp).to(self.device)
+            actor_loss, critic_loss, tour_length_mean = self.step(b_inp,
+                                                                  clip_norm=clip_norm)
+            actor_total_loss += actor_loss
+            critic_total_loss += critic_loss
+            total_tour_length += tour_length_mean
+            if (step+1)%step_log == 0:
+                print(f"Step: {step} ||", end=' ')
+                print(f"Actor Loss:  {actor_total_loss / (step+1):.6f} ||", end=' ') 
+                print(f"Critic Loss: {critic_total_loss/(step+1):.3f} ||", end=' ')
+                print(f"Tour Length: {total_tour_length/(step+1):.2f}")
                 
-                if self.is_cuda_available:
-                    b_inp = b_inp.cuda()
-                actor_loss, critic_loss, tour_length_mean = self.step(b_inp,
-                                                                      clip_norm=clip_norm)
-                actor_total_loss += actor_loss
-                critic_total_loss += critic_loss
-                tour_length_total += tour_length_mean
-                batch_cnt += 1
-                if (step+1)%10 == 0:
-                    print(f"Step: {step} ||", end=' ')
-                    print(f"Actor Loss:  {actor_total_loss / (step+1):.6f} ||", end=' ') 
-                    print(f"Critic Loss: {critic_total_loss/(step+1):.3f} ||", end=' ')
-                    print(f"Tour Length: {tour_length_total/(step+1):.2f}")
-            list_of_actor_loss.append(actor_total_loss/batch_cnt)
-            list_of_critic_loss.append(critic_total_loss/batch_cnt)
-            list_of_tour_length_mean.append(tour_length_total/batch_cnt)
+            
+            if (step+1)%val_step == 0:
+                val_total_tour_length = 0
+                batch_cnt = 0
+                for val_b_inp, _, _, outp, _ in eval_dl:
+                    val_b_inp = Variable(val_b_inp).to(self.device)
+                    _, _, _, idxs = self.model(val_b_inp)
+                    sample_solution = tensor_sort(val_b_inp, idxs, dim=1).squeeze()
+                    tour_length = Reward(sample_solution, self.device).mean()
+                    val_total_tour_length += tour_length.cpu().detach().numpy()
+                    batch_cnt += 1
+                    
+                print(f"Step: {step} || Validation Tour Length Mean: {val_total_tour_length/batch_cnt:.2f}")
+                
+                    
+                
+            
+        list_of_actor_loss.append(actor_total_loss/batch_cnt)
+        list_of_critic_loss.append(critic_total_loss/batch_cnt)
+        list_of_tour_length_mean.append(tour_length_total/batch_cnt)
             
         
         torch.save(self.model.state_dict(), save_model_file)
@@ -351,18 +359,19 @@ if __name__ == "__main__":
     T = 1 # Temperature Hyperparameter
     batch_size = 512
     n_epoch = 1
-    steps = 1
+    steps = 10000
     step_size = 5000 # LR decay
     embedding_dim = 128 #d-dimensional embedding dim
     embedding_dim_critic = embedding_dim
-    
+    step_log = 2
+    val_step = 2
     f_city_fixed=False
     
     beam_search = None
     
     save_model_file="RLPointerModel_TSP5.pt"
     
-    train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
+    #train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
     eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
     
     train_ds = Generator(batch_size*steps, seq_len)
@@ -376,7 +385,8 @@ if __name__ == "__main__":
     
     Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
                                                                                         save_model_file=save_model_file,
-                                                                                        nepoch=n_epoch)
+                                                                                        step_log=step_log,
+                                                                                        val_step=val_step)
     
     trainer.eval_model(eval_ds)
         
