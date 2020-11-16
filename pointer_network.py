@@ -143,7 +143,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             g_l = hidden[0].squeeze(0) # query [batch, hidden_size] 
             for j in range(self.n_glimpses):
                 g_l, align_score, _, mask = self.attending(memory_bank, g_l, mask)
-            dec_inp, align_score, logits, mask = self.pointing(memory_bank, g_l, mask, idxs) # align_score -> [batch_size, #nodes]
+            _, align_score, logits, mask = self.pointing(memory_bank, g_l, mask, idxs) # align_score -> [batch_size, #nodes]
             
             idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
             #idxs = torch.argmax(align_score, dim=1)
@@ -153,7 +153,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
                     break
             selections.append(idxs)
             align_scores.append(align_score)
-            #dec_inp = inp[[j for j in range(inp.shape[0])], idxs.data,:]
+            dec_inp = inp[[j for j in range(inp.shape[0])], idxs.data,:]
             
         
         if inp.shape[0] == 1:

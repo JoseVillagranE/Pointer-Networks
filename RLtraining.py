@@ -231,7 +231,7 @@ class NeuronalOptm:
             if (step+1)%val_step == 0:
                 val_total_tour_length = 0
                 batch_cnt = 0
-                for val_b_inp, _, _, outp, _ in eval_dl:
+                for val_b_inp in eval_dl:
                     val_b_inp = Variable(val_b_inp).to(self.device)
                     _, _, _, idxs = self.model(val_b_inp)
                     sample_solution = tensor_sort(val_b_inp, idxs, dim=1).squeeze()
@@ -244,9 +244,9 @@ class NeuronalOptm:
                     
                 
             
-        list_of_actor_loss.append(actor_total_loss/batch_cnt)
-        list_of_critic_loss.append(critic_total_loss/batch_cnt)
-        list_of_tour_length_mean.append(tour_length_total/batch_cnt)
+            list_of_actor_loss.append(actor_total_loss/(step+1))
+            list_of_critic_loss.append(critic_total_loss/(step+1))
+            list_of_tour_length_mean.append(total_tour_length/(step+1))
             
         
         torch.save(self.model.state_dict(), save_model_file)
@@ -345,14 +345,14 @@ if __name__ == "__main__":
     train_filename="./CH_TSP_data/tsp5.txt" 
     val_filename = "./CH_TSP_data/tsp5_test.txt"
 
-    seq_len = 5
+    seq_len = 20
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
     rnn_hidden_size = 128
     rnn_type = 'LSTM'
     bidirectional = False
     hidden_dim_critic = rnn_hidden_size
-    process_block_iter = 1
+    process_block_iter = 3
     inp_len_seq = seq_len
     lr = 1e-3
     C = 10 # Logit clipping
@@ -363,8 +363,9 @@ if __name__ == "__main__":
     step_size = 5000 # LR decay
     embedding_dim = 128 #d-dimensional embedding dim
     embedding_dim_critic = embedding_dim
-    step_log = 2
-    val_step = 2
+    step_log = 10
+    val_step = 20
+    seed = 22
     f_city_fixed=False
     
     beam_search = None
@@ -372,18 +373,19 @@ if __name__ == "__main__":
     save_model_file="RLPointerModel_TSP5.pt"
     
     #train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
-    eval_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
+    train_ds = Generator(batch_size*steps, seq_len, seed = seed)
+    val_ds = Generator(10000, seq_len, seed = seed+354)
+    test_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
     
-    train_ds = Generator(batch_size*steps, seq_len)
     
     print("Train data size: {}".format(len(train_ds)))
-    print("Eval data size: {}".format(len(eval_ds)))
+    print("Eval data size: {}".format(len(val_ds)))
     
     trainer = NeuronalOptm(input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
                            C=C, batch_size=batch_size, T=T, step_size=step_size)
     
-    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, eval_ds,
+    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
                                                                                         save_model_file=save_model_file,
                                                                                         step_log=step_log,
                                                                                         val_step=val_step)

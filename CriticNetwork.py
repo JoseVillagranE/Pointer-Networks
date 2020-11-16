@@ -28,7 +28,7 @@ class CriticNetwork(nn.Module):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
-        self.process_block_iter = process_block_iter
+        self.n_process_block = process_block_iter
         
         # self.encoder = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
         #                           hidden_dim, dropout)
@@ -76,10 +76,9 @@ class CriticNetwork(nn.Module):
         
         enc_inp, (hidden, c_n) = self.encoder(inp, None)
         dec_input = self.dec_input.unsqueeze(0).repeat(enc_inp.shape[0],1).to(self.device) # [batch, emb_dim]
-        for i in range(inp.shape[1]):
+        for i in range(self.n_process_block):
             _, (hidden, c_n) = self.process_block(dec_input.unsqueeze(1), (hidden, c_n))
-            for j in range(self.process_block_iter):
-                g_l, align_score, _, _ = self.attending(enc_inp, hidden.squeeze(),
+            g_l, align_score, _, _ = self.attending(enc_inp, hidden.squeeze(),
                                                    None, None)
         outp = self.decoder(g_l).squeeze()
         return outp

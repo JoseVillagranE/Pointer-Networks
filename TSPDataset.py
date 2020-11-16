@@ -101,8 +101,8 @@ class TSPDataset(Dataset):
 
 
 class Generator(Dataset):
-	def __init__(self, n_samples, city_t):
-		self.data = get_batch_nodes(n_samples, city_t)
+	def __init__(self, n_samples, city_t, seed = None):
+		self.data = get_batch_nodes(n_samples, city_t, seed=seed)
 		
 	def __getitem__(self, idx):
 		return self.data[idx]
