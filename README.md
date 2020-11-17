@@ -92,6 +92,30 @@ Tampoco pudieron lograr la implementación original. Podría ser que el paper or
 
 #### Reforzado
 
+Los modelos implementados para el entrenamiento Reforzado se muestran a continuación:
+
+
+* **multinomial-RL**: Establece la elección del siguiente nodos muestreando desde las probabilidades obtenidas.
+* **Greedy-RL**: Establece la elección del siguiente nodo elegiendo el de mayor probabilidad.
+* **Sampling-RL**: Estrategia de validación mediante el muestreo del menor tour.
+* **Active-Search-RL**: Estrategia de validación mediante Active Search.
+* **Bello's Paper**: Mejor resultado proveniente de este paper para cada largo de viaje.
+* **Supervised**: Resultados provenientes del paper original de Pointer-Networks.
+* **Optimial**: Largo optimial del viaje.
+
+Los resultados obtenidos del largo promedio de viaje son los siguientes:
+
+| Configuración del modelo 	| Multinomial-RL 	| Greedy-RL 	| Sampling-RL 	| Active-Search-RL 	| Bello's Paper 	| Supervised 	| Optimal 	|
+|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|
+| 5 	|  	|  	|  	|  	| * 	| 2.12 	| 2.12 	|
+| 10 	| 2.91 	|  	|  	|  	| * 	| 2.88 	| 2.87 	|
+| 20 	| 3.95 	|  	|  	|  	| 3.82 	| 3.88 	| 3.82 	|
+
+Es necesario mencionar que se entrenó con viajes generados aleatoriamente con pytorch ocupando la semilla por defecto para el entrenamiento y la semilla 666 para la validación del modelo.
+Además, el entrenamiento del modelo es sensible a la elección de esta semilla, en donde para algunas puede que el modelo no funcione o al menos no converge al mejor resultado. Claramente, esto es consecuencia directa de la complejidad
+que se podrían generar en los viajes para la obtención de estos mismo de forma aleatoria. 
+
+
 ### Referencias
 <a id="1">[1]</a>
 O. Vinyals, M. Fortunato, and N. Jaitly, “Pointer networks,” in Proc. Adv. Neural Inf. Process. Syst., Montreal, QC, Canada, Dec. 2015, pp. 2692–2700.
