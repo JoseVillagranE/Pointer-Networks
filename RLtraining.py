@@ -263,9 +263,7 @@ class NeuronalOptm:
     
     def eval_model(self, eval_ds, batch_size=1, n_plt_tours=9, n_cols=3, beam_serch=None):
         
-        
-        device = 'cuda:0' if torch.cuda.is_available else 'cpu'
-        self.model = self.model.eval().to(device)
+        self.model = self.model.eval().to(self.device)
         countAcc = 0
         tour_len = 0 
         eval_dl = DataLoader(eval_ds, num_workers=0, batch_size=batch_size, shuffle=True)
@@ -294,58 +292,37 @@ class NeuronalOptm:
         
         
     
-    def plot_one_tour(self, example):
+    def inference(self, example):
     
         self.model.eval()
-        inp, inp_len, outp_in, outp_out, outp_len = example
-        inp_t = Variable(torch.from_numpy(np.array([inp])))
-        inp_len = torch.from_numpy(inp_len)
-        outp_in = Variable(torch.from_numpy(np.array([outp_in])))
-        outp_out = Variable(torch.from_numpy(outp_out))
-        
-        embedding = self.embedding.cpu()
-        embedded_inputs = embedding(inp_t).cpu()
-        dec_0_i = self.dec_0.unsqueeze(0)
-        # embedded_inputs = []
-        # # result is [batch_size, 1, seq_len, inp_dim] 
-        # ips = inp_t.unsqueeze(1)
-        
-        # for i in range(self.seq_len):
-        #     # [batch_size x 1 x input_dim] * [batch_size x input_dim x embedding_dim]
-        #     # result is [batch_size, embedding_dim]
-        #     embedded_inputs.append(torch.bmm(
-        #         ips[:, :, i, :].float(),
-        #         embedding_i).squeeze(1))
-            
-        
-        # # Result is [ batch_size x sourceL x embedding_dim]
-        # embedded_inputs = Variable(torch.cat(embedded_inputs).view(1, self.seq_len,
-        #                                             self.embedding_dim), requires_grad=False)
-        
-        
-        if torch.cuda.is_available():
-            embedded_inputs = embedded_inputs.cuda()
-        
-        align_score, _, _, idxs = self.model(embedded_inputs, inp_len, dec_0_i, outp_len)
-        # align_score = align_score[0].detach().numpy()
-        # idxs = np.argmax(align_score.cpu(), axis=1)
-        # idxs = PreProcessOutput(idxs)
-        
-        # inp = inp[1:, :]
+        example = Variable(example).to(self.device)
+        self.model = self.model.to(self.device)
+        align_score, _, _, idxs = self.model(example)
         
         idxs = idxs.cpu().numpy()
+        example = example.cpu().numpy().squeeze()
+        plt.scatter(example[0,0], example[0, 1], color='#FF0000', label='start node')
+        plt.scatter(example[1:,0], example[1:, 1])
+        for i in range(len(idxs)-1):
+            start_pos = example[idxs[i]]
+            end_pos = example[idxs[i+1]]
+            plt.annotate("", xy=start_pos, xycoords='data', xytext=end_pos, textcoords='data',
+                        arrowprops=dict(arrowstyle="->", connectionstyle="arc3"))
+            
+        start_pos = example[idxs[-1]]
+        end_pos = example[idxs[0]]
+        plt.annotate("", xy=start_pos, xycoords='data', xytext=end_pos, textcoords='data',
+                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3"))
         
-        plt.figure(figsize=(10,10))
-        plt.plot(inp[:,0], inp[:,1], 'o')
-        for i in range(idxs.shape[0]-1):
-            plt.plot(inp[[idxs[i], idxs[i+1]],0], inp[[idxs[i], idxs[i+1]], 1], 'k-')
-
+        plt.legend(loc='best')
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path))
 if __name__ == "__main__":
     
     train_filename="./CH_TSP_data/tsp5.txt" 
     val_filename = "./CH_TSP_data/tsp5_test.txt"
 
-    seq_len = 20
+    seq_len = 10
     num_layers = 1 # Se procesa con sola una celula por coordenada. 
     input_lenght = 2 
     rnn_hidden_size = 128
@@ -385,11 +362,21 @@ if __name__ == "__main__":
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
                            C=C, batch_size=batch_size, T=T, step_size=step_size)
     
-    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
-                                                                                        save_model_file=save_model_file,
-                                                                                        step_log=step_log,
-                                                                                        val_step=val_step)
+    # Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
+    #                                                                                     save_model_file=save_model_file,
+    #                                                                                     step_log=step_log,
+    #                                                                                     val_step=val_step)
     
-    trainer.eval_model(eval_ds)
+    # trainer.eval_model(val_ds)
+    
+    trainer.load_model('Pesos/RLPointerModel_TSP10.pt')
+    plt.figure(figsize=(10,10))
+    plt.subplot(1, 2, 1)
+    example = torch.rand((1, 10, 2))
+    trainer.inference(example)
+    trainer.load_model('Pesos/RLPointerModel_TSP20.pt')
+    plt.subplot(1, 2, 2)
+    example = torch.rand((1, 20, 2))
+    trainer.inference(example)
         
         
