@@ -33,7 +33,7 @@ class Attention(nn.Module):
       dim : hidden dimension size
     """
     def __init__(self, hidden_dim, mask_bool=False, hidden_att_bool=False,
-                 C=None, T=1, is_cuda_available=False):
+                 C=None, T=1, device='cpu'):
         super().__init__()
         self.mask_bool = mask_bool
         self.hidden_att_bool = hidden_att_bool
@@ -43,13 +43,9 @@ class Attention(nn.Module):
         
         self.W_ref = nn.Conv1d(hidden_dim, hidden_dim, 1, 1)
         self.W_q = nn.Linear(hidden_dim, hidden_dim, bias=True)
-        if is_cuda_available:
-            self.W_ref = self.W_ref.cuda()
-            self.W_q = self.W_q.cuda()
-            self.V = nn.Parameter(torch.cuda.FloatTensor(hidden_dim))
-        
-        else:
-            self.V = nn.Parameter(torch.FloatTensor(hidden_dim)).cuda()
+        self.W_ref = self.W_ref.to(device)
+        self.W_q = self.W_q.to(device)
+        self.V = nn.Parameter(torch.FloatTensor(hidden_dim)).to(device)
             
             
     def forward(self, src, tgt, mask=None, prev_idxs=None):

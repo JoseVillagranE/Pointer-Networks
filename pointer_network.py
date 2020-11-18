@@ -14,7 +14,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout, batch_size, mask_bool=False, hidden_att_bool=False,
-        C=None, is_cuda_available=False, greedy=True):
+        C=None, device='cpu', greedy=True):
         super(PointerNetRNNDecoder, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         #    self.attention = Attention("dot", hidden_size)
@@ -23,7 +23,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             hidden_size *= 2
         self.attention = Attention(hidden_size, C=C, mask_bool=mask_bool,
                                    hidden_att_bool=hidden_att_bool,
-                                   is_cuda_available=is_cuda_available)
+                                   device=device)
         
         self.mask_bool = mask_bool
         self.hidden_att_bool= hidden_att_bool
@@ -31,8 +31,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         
         self.dec_0 = torch.FloatTensor(input_size)
         self.dec_0.data.uniform_(0, 1)
-        if torch.cuda.is_available():
-                    self.dec_0 = self.dec_0.cuda()
+        self.dec_0 = self.dec_0.to(device)
         self.dec_0 = nn.Parameter(self.dec_0)
     
     def forward(self, tgt, memory_bank, hidden, inp, Teaching_Forcing=0):
@@ -102,7 +101,8 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
     """
 
     def __init__(self, rnn_type, bidirectional, num_layers,
-        input_size, hidden_size, dropout, batch_size, C=None, T=1, n_glimpses=1):
+        input_size, hidden_size, dropout, batch_size, C=None, T=1, n_glimpses=1,
+        device='cpu', greedy=False):
         super(PointerNetRNNDecoder_RL, self).__init__(rnn_type, bidirectional, num_layers,
         input_size, hidden_size, dropout)
         
@@ -110,13 +110,14 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             hidden_size *= 2
         
         self.pointing = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
-                                   C=C, T=T, is_cuda_available=torch.cuda.is_available())
+                                   C=C, T=T, device=device)
         self.attending = Attention(hidden_size, mask_bool=True, hidden_att_bool=False,
-                                   C=C, T=T, is_cuda_available=torch.cuda.is_available())
+                                   C=C, T=T, device=device)
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         self.decoder = nn.LSTM(input_size, hidden_size, batch_first=True)
         self.dec_input = nn.Parameter(torch.FloatTensor(input_size))
+        self.greedy = greedy
         
         
     def forward(self, inp, memory_bank, hidden):
@@ -145,8 +146,10 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
                 g_l, align_score, _, mask = self.attending(memory_bank, g_l, mask)
             _, align_score, logits, mask = self.pointing(memory_bank, g_l, mask, idxs) # align_score -> [batch_size, #nodes]
             
-            idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
-            #idxs = torch.argmax(align_score, dim=1)
+            if self.greedy:
+                idxs = torch.argmax(align_score, dim=1).squeeze(-1).long()
+            else:
+                idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
             for old_idxs in selections:
                 if old_idxs.eq(idxs).data.any():
                     idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
@@ -179,7 +182,7 @@ class PointerNet(nn.Module):
     def __init__(self, rnn_type, bidirectional, num_layers,
         encoder_input_size, rnn_hidden_size, dropout=0, batch_size=128, 
         mask_bool=False, hidden_att_bool=False, training_type="Sup", C=None, T=1, 
-        is_cuda_available = False):
+        device='cpu', greedy=False):
         super().__init__()
         # self.encoder = RNNEncoder(rnn_type, bidirectional,num_layers, encoder_input_size,
         #                           rnn_hidden_size, dropout)
@@ -189,19 +192,19 @@ class PointerNet(nn.Module):
         
         self.embedding = nn.Linear(2, encoder_input_size, bias=False)
         
-        if is_cuda_available:
-            self.embedding = self.embedding.cuda()
+        self.embedding = self.embedding.to(device)
         
         if training_type == "Sup":
             self.decoder = PointerNetRNNDecoder(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size,
                                     dropout,batch_size, mask_bool=mask_bool,
                                     hidden_att_bool=hidden_att_bool,
-                                    C=C, is_cuda_available=is_cuda_available)
+                                    C=C, device=device)
         elif training_type == "RL":
             self.decoder = PointerNetRNNDecoder_RL(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size,
-                                    dropout, batch_size, C=C, T=T)
+                                    dropout, batch_size, C=C, T=T, device=device,
+                                    greedy=greedy)
          
       
     def forward(self, inp, inp_len=None, outp=None, outp_len=None, Teaching_Forcing=0):

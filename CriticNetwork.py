@@ -24,20 +24,16 @@ from torch import optim
 class CriticNetwork(nn.Module):
     
     def __init__(self, rnn_type, num_layers, bidirectional, embedding_dim, hidden_dim, 
-                 process_block_iter, batch_size, dropout=0.0, C=None, is_cuda_available=False):
+                 process_block_iter, batch_size, dropout=0.0, C=None):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.n_process_block = process_block_iter
-        
-        # self.encoder = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
-        #                           hidden_dim, dropout)
+        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.encoder = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True)
-        # self.process_block = RNNEncoder(rnn_type, bidirectional, num_layers, embedding_dim,
-        #                           hidden_dim, dropout)
         self.process_block = nn.LSTM(embedding_dim, hidden_dim, batch_first = True)
         self.attending = Attention(hidden_dim, mask_bool=True, hidden_att_bool=False,
-                                   C=None, is_cuda_available=is_cuda_available)
+                                   C=None, device=self.device)
         self.decoder = nn.Sequential(nn.Linear(hidden_dim, hidden_dim, bias=False),
                                      nn.ReLU(),
                                      nn.Linear(hidden_dim, 1, bias=False))
@@ -47,9 +43,6 @@ class CriticNetwork(nn.Module):
         self.dec_input = nn.Parameter(torch.FloatTensor(embedding_dim))
         
         self.sm = nn.Softmax()
-        
-        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        
         self.encoder = self.encoder.to(self.device)
         self.process_block = self.process_block.to(self.device)
         self.decoder = self.decoder.to(self.device)

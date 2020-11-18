@@ -106,12 +106,12 @@ class NeuronalOptm:
     def __init__(self, input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                  embedding_dim, hidden_dim_critic, process_block_iter,
                  inp_len_seq, lr, C=None, batch_size=10, T=1, training_type="RL", actor_decay_rate=0.96,
-                 critic_decay_rate=0.99, step_size=5000):
+                 critic_decay_rate=0.99, step_size=5000, greedy=False):
         
         super().__init__()
         self.model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim,
                        rnn_hidden_size, batch_size=batch_size,
-                       training_type=training_type, C=C, T=T)
+                       training_type=training_type, C=C, T=T, greedy=greedy)
         
         self.model.apply(weights_init)
         
@@ -120,25 +120,11 @@ class NeuronalOptm:
         self.batch_size = batch_size
         self.embedding_dim = embedding_dim
         self.seq_len = inp_len_seq
-        
-        # enconder_input_size: dimension de cada coordenada(eg: 2)
-        # rnn_hidden_size: dimensión del vector de embedding hidden
-        
-        # reemplazo de los labels de supervised-learning
-        
         dec_0 = torch.FloatTensor(embedding_dim)
         embedding = torch.FloatTensor(input_lenght, self.embedding_dim)
         
         self.dec_0 = nn.Parameter(dec_0)
         self.dec_0.data.uniform_(0, 1)
-        # self.embedding = nn.Parameter(embedding)
-        
-        # self.dec_0.data.uniform_(-(1. / math.sqrt(self.embedding_dim)), 1. / math.sqrt(self.embedding_dim))
-        # self.embedding.data.uniform_(-(1. / math.sqrt(self.embedding_dim)), 1. / math.sqrt(self.embedding_dim))
-        
-        # result is [batch_size x inp_seq_len x 2]
-        # self.dec_0 = self.dec_0.unsqueeze(0).repeat(batch_size, 1)
-        
         
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         
@@ -269,9 +255,9 @@ class NeuronalOptm:
         eval_dl = DataLoader(eval_ds, num_workers=0, batch_size=batch_size, shuffle=True)
         for b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_out, b_eval_outp_len in eval_dl:
         
-            b_eval_inp = Variable(b_eval_inp).to(device)
-            b_eval_outp_in = Variable(b_eval_outp_in).to(device)
-            b_eval_outp_out = Variable(b_eval_outp_out).to(device)
+            b_eval_inp = Variable(b_eval_inp).to(self.device)
+            b_eval_outp_in = Variable(b_eval_outp_in).to(self.device)
+            b_eval_outp_out = Variable(b_eval_outp_out).to(self.device)
         
         
             align_score, _, _, idxs = self.model(b_eval_inp)
@@ -280,7 +266,7 @@ class NeuronalOptm:
             labels = b_eval_outp_out.cpu().detach().numpy().squeeze()
             if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs_, labels), True):
                 countAcc += 1
-            sample_solution = tensor_sort(b_eval_inp, idxs.unsqueeze(0), dim=1).to(device)
+            sample_solution = tensor_sort(b_eval_inp, idxs.unsqueeze(0), dim=1).to(self.device)
             tour_len += Reward(sample_solution, True).cpu().detach().numpy()
             
     
@@ -342,7 +328,8 @@ if __name__ == "__main__":
     embedding_dim_critic = embedding_dim
     step_log = 10
     val_step = 20
-    seed = 22
+    greedy = True
+    seed = 666
     f_city_fixed=False
     
     beam_search = None
@@ -350,8 +337,8 @@ if __name__ == "__main__":
     save_model_file="RLPointerModel_TSP5.pt"
     
     #train_ds = TSPDataset(train_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
-    train_ds = Generator(batch_size*steps, seq_len, seed = seed)
-    val_ds = Generator(10000, seq_len, seed = seed+354)
+    train_ds = Generator(batch_size*steps, seq_len)
+    val_ds = Generator(10000, seq_len, seed = seed)
     test_ds = TSPDataset(val_filename, f_city_fixed=f_city_fixed, lineCountLimit=1000)
     
     
@@ -360,23 +347,23 @@ if __name__ == "__main__":
     
     trainer = NeuronalOptm(input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
-                           C=C, batch_size=batch_size, T=T, step_size=step_size)
+                           C=C, batch_size=batch_size, T=T, step_size=step_size, greedy=greedy)
     
-    # Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
-    #                                                                                     save_model_file=save_model_file,
-    #                                                                                     step_log=step_log,
-    #                                                                                     val_step=val_step)
+    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
+                                                                                        save_model_file=save_model_file,
+                                                                                        step_log=step_log,
+                                                                                        val_step=val_step)
     
     # trainer.eval_model(val_ds)
     
-    trainer.load_model('Pesos/RLPointerModel_TSP10.pt')
-    plt.figure(figsize=(10,10))
-    plt.subplot(1, 2, 1)
-    example = torch.rand((1, 10, 2))
-    trainer.inference(example)
-    trainer.load_model('Pesos/RLPointerModel_TSP20.pt')
-    plt.subplot(1, 2, 2)
-    example = torch.rand((1, 20, 2))
-    trainer.inference(example)
+    # trainer.load_model('Pesos/RLPointerModel_TSP10.pt')
+    # plt.figure(figsize=(10,10))
+    # plt.subplot(1, 2, 1)
+    # example = torch.rand((1, 10, 2))
+    # trainer.inference(example)
+    # trainer.load_model('Pesos/RLPointerModel_TSP20.pt')
+    # plt.subplot(1, 2, 2)
+    # example = torch.rand((1, 20, 2))
+    # trainer.inference(example)
         
         
