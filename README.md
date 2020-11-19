@@ -107,13 +107,15 @@ Los resultados obtenidos del largo promedio de viaje son los siguientes:
 
 | Configuración del modelo 	| Multinomial-RL 	| Greedy-RL 	| Sampling-RL 	| Active-Search-RL 	| Bello's Paper 	| Supervised 	| Optimal 	|
 |:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|:-:	|
-| 5 	| 2.13	|  	|  	|  	| * 	| 2.12 	| 2.12 	|
-| 10 	| 2.91 	|  	|  	|  	| * 	| 2.88 	| 2.87 	|
+| 5 	| 2.13	| 2.13	|  	|  	| * 	| 2.12 	| 2.12 	|
+| 10 	| 2.91 	| 3.0	|  	|  	| * 	| 2.88 	| 2.87 	|
 | 20 	| 3.95 	|  	|  	|  	| 3.82 	| 3.88 	| 3.82 	|
 
 Es necesario mencionar que se entrenó con viajes generados aleatoriamente con pytorch ocupando la semilla por defecto para el entrenamiento y la semilla 666 para la validación del modelo.
 Además, el entrenamiento del modelo es sensible a la elección de esta semilla, en donde para algunas puede que el modelo no funcione o al menos no converge al mejor resultado. Claramente, esto es consecuencia directa de la complejidad
-que se podrían generar en los viajes para la obtención de estos mismo de forma aleatoria. 
+que se podrían generar en los viajes para la obtención de estos mismo de forma aleatoria.
+
+El entrenamiento greedy mostro un comportamiento más inestable en los resultados que se iban obteniendo a lo largo del entrenamiento.
 
 A modo de ejemplo se infieren dos viajes: Un primer de 10 nodos y un segundo de 20 nodos.
 
