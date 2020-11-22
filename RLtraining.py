@@ -50,6 +50,7 @@ def weights_init(module, a=-0.08, b=0.08):
 
 
 
+
 def Reward(sample_solution, device='cpu'):
     '''
     input:
@@ -247,32 +248,33 @@ class NeuronalOptm:
         return list_of_actor_loss, list_of_critic_loss, list_of_tour_length_mean
     
     
-    def eval_model(self, eval_ds, batch_size=1, n_plt_tours=9, n_cols=3, beam_serch=None):
+    def eval_model(self, eval_ds, batch_size=1, search='None', batch_sampling=16):
         
         self.model = self.model.eval().to(self.device)
         countAcc = 0
         tour_len = 0 
         eval_dl = DataLoader(eval_ds, num_workers=0, batch_size=batch_size, shuffle=True)
-        for b_eval_inp, b_eval_inp_len, b_eval_outp_in, b_eval_outp_out, b_eval_outp_len in eval_dl:
+        for b_eval_inp in eval_dl:
         
             b_eval_inp = Variable(b_eval_inp).to(self.device)
-            b_eval_outp_in = Variable(b_eval_outp_in).to(self.device)
-            b_eval_outp_out = Variable(b_eval_outp_out).to(self.device)
         
-        
-            align_score, _, _, idxs = self.model(b_eval_inp)
+            if search == 'sampling':
+                align_score, idxs = self.sampling(self.model, b_eval_inp, batch_sampling, device = self.device)
+            else:
+                align_score, _, _, idxs = self.model(b_eval_inp)
+            
             align_score = align_score.cpu().detach().numpy()
             idxs_ = idxs.cpu().detach().numpy().copy()
-            labels = b_eval_outp_out.cpu().detach().numpy().squeeze()
-            if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs_, labels), True):
-                countAcc += 1
+            # labels = b_eval_outp_out.cpu().detach().numpy().squeeze()
+            # if functools.reduce(lambda i, j: i and j, map(lambda m, k: m==k, idxs_, labels), True):
+            #     countAcc += 1
             sample_solution = tensor_sort(b_eval_inp, idxs.unsqueeze(0), dim=1).to(self.device)
-            tour_len += Reward(sample_solution, True).cpu().detach().numpy()
+            tour_len += Reward(sample_solution, self.device).cpu().detach().numpy()
             
     
-        Acc = countAcc/eval_ds.__len__()
+        # Acc = countAcc/eval_ds.__len__()
         tour_len_mean = tour_len[0]/eval_ds.__len__()
-        print("The Accuracy of the model is: {}".format(Acc))
+        # print("The Accuracy of the model is: {}".format(Acc))
         print("Total Number of Tours: {}".format(eval_ds.__len__()))
         print("Avg Tour Length: {:.3f}".format(tour_len_mean))
         
@@ -301,16 +303,67 @@ class NeuronalOptm:
                     arrowprops=dict(arrowstyle="->", connectionstyle="arc3"))
         
         plt.legend(loc='best')
+        
     def load_model(self, path):
         self.model.load_state_dict(torch.load(path))
+        
+        
+    def active_search(self, example, batch_sampling, steps=16, clip_norm=2.0, alpha = 0.2):
+        
+        batch = example.repeat(batch_sampling, 1, 1).to(self.device) # [batch, #nodes, 2]
+        (batch_size, n_nodes, _) = batch.size()
+        random_solution = [torch.from_numpy(np.random.choice(n_nodes, size=n_nodes, replace=False)) for _ in range(batch_size)]
+        random_solution = torch.stack(random_solution).long().to(self.device)
+        sample_solution = tensor_sort(batch, random_solution).squeeze()
+        baseline = Reward(sample_solution, device=self.device)
+        
+        l_min = baseline[0] # pick anyone element of the baseline
+        best_solution = sample_solution[0]
+        
+        for step in range(steps):
+            probs, _, _, idxs = self.model(batch)
+            sample_solution = tensor_sort(batch, idxs, dim=1).squeeze()
+            tour_length = Reward(sample_solution, self.device) # [batch]
+            best_tour_idx = torch.argmin(tour_length)
+            
+            if tour_length[best_tour_idx] < l_min:
+                best_solution = sample_solution[best_tour_idx]
+                l_min = tour_length[best_tour_idx]
+                
+            sample_probs = tensor_sort(probs, idxs, dim=2).squeeze() # [batch, seq_len]
+            log_probs = torch.log(sample_probs).sum(dim=1)
+            adv = tour_length.detach() - baseline.detach()
+            actor_loss = (adv*log_probs).mean()
+            
+            self.optimizer.zero_grad()
+            actor_loss.backward()
+            clip_grad_norm_(self.model.parameters(), clip_norm)
+            self.optimizer.step()
+            baseline = alpha*baseline + (1 - alpha)*baseline.mean()
+            print(f"step: {step}")
+            
+        return best_solution
+        
+    @staticmethod
+    def sampling(model, example, batch_sampling, device='cpu'):
+        batch = example.repeat(batch_sampling, 1, 1) # [batch, #nodes, 2]
+        probs, _, _, idxs = model(batch)
+        sample_solution = tensor_sort(batch, idxs, dim=1).squeeze()
+        tour_length = Reward(sample_solution, device) # [batch]
+        idx = torch.argmin(tour_length)
+        best_idxs = idxs[idx]
+        best_prob = probs[idx]
+        return best_prob, best_idxs
+    
+            
 if __name__ == "__main__":
     
     train_filename="./CH_TSP_data/tsp5.txt" 
     val_filename = "./CH_TSP_data/tsp5_test.txt"
 
-    seq_len = 10
-    num_layers = 1 # Se procesa con sola una celula por coordenada. 
-    input_lenght = 2 
+    seq_len = 5
+    num_layers = 1 # Se procesa con sola una celula por coordenada.
+    input_lenght = 2
     rnn_hidden_size = 128
     rnn_type = 'LSTM'
     bidirectional = False
@@ -319,7 +372,7 @@ if __name__ == "__main__":
     inp_len_seq = seq_len
     lr = 1e-3
     C = 10 # Logit clipping
-    T = 1 # Temperature Hyperparameter
+    T = 1.0 # Temperature Hyperparameter
     batch_size = 512
     n_epoch = 1
     steps = 10000
@@ -328,10 +381,9 @@ if __name__ == "__main__":
     embedding_dim_critic = embedding_dim
     step_log = 10
     val_step = 20
-    greedy = True
+    greedy = False
     seed = 666
     f_city_fixed=False
-    
     beam_search = None
     
     save_model_file="RLPointerModel_TSP5.pt"
@@ -349,14 +401,17 @@ if __name__ == "__main__":
                            embedding_dim, hidden_dim_critic, process_block_iter, inp_len_seq, lr, 
                            C=C, batch_size=batch_size, T=T, step_size=step_size, greedy=greedy)
     
-    Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
-                                                                                        save_model_file=save_model_file,
-                                                                                        step_log=step_log,
-                                                                                        val_step=val_step)
+    # Actor_Training_Loss, Critic_Training_Loss, Tour_training_mean = trainer.training(train_ds, val_ds,
+    #                                                                                     save_model_file=save_model_file,
+    #                                                                                     step_log=step_log,
+    #                                                                                     val_step=val_step)
     
-    # trainer.eval_model(val_ds)
+    trainer.load_model('Pesos/RLPointerModel_TSP5.pt')
+    # trainer.eval_model(val_ds, search='sampling')
     
-    # trainer.load_model('Pesos/RLPointerModel_TSP10.pt')
+    example = torch.rand((1, 5, 2))
+    trainer.active_search(example, 16)
+    
     # plt.figure(figsize=(10,10))
     # plt.subplot(1, 2, 1)
     # example = torch.rand((1, 10, 2))
