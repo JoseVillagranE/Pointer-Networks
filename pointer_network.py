@@ -21,6 +21,8 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         self.greedy = greedy
         if bidirectional:
             hidden_size *= 2
+            
+        # Attention Network
         self.attention = Attention(hidden_size, C=C, mask_bool=mask_bool,
                                    hidden_att_bool=hidden_att_bool,
                                    device=device)
@@ -35,6 +37,14 @@ class PointerNetRNNDecoder(RNNDecoderBase):
         self.dec_0 = nn.Parameter(self.dec_0)
     
     def forward(self, tgt, memory_bank, hidden, inp, Teaching_Forcing=0):
+        
+        """
+        tgt: input in rigth order of sequence (for Teaching Learning)
+        memory_bank: Encoder output
+        hidden: Encoder Hidden state
+        Teaching_Forcing(float): [0, 1] probability for choose a input decoder 
+                                in right way (Supervised)
+        """
         
         align_scores = []
         idxs = []
@@ -57,10 +67,12 @@ class PointerNetRNNDecoder(RNNDecoderBase):
                 dec_i = inp[idx.data, [j for j in range(tgt.shape[1])],:].unsqueeze(0)
             
             hidden_t = hidden[0].transpose(0, 1)
+            # if LSTM is biderectional
             if self.bidirectional:
                 hidden_t = hidden_t.reshape(hidden_t.shape[0], 1, -1)
             align_score = None
             if self.hidden_att_bool:
+                # Use hidden attention state in order to obtain the final sequence
                 hidden_att, align_score, logit, mask = self.attention(memory_bank, 
                                                             hidden_t,
                                                             mask, 
@@ -68,13 +80,14 @@ class PointerNetRNNDecoder(RNNDecoderBase):
                 dec_outp, hidden = self.rnn(dec_i, hidden_att) # i=0 -> token
                 
             else:
+                # Attention mechanism use the encoder hidden state
                 dec_outp, hidden = self.rnn(dec_i, hidden) # i=0 -> token
                 align_score, logit, mask = self.attention(memory_bank, 
                                                             hidden_t,
                                                             mask, 
                                                             idx)
             if self.greedy: 
-                idx = align_score.argmax(dim=2).squeeze() # todo bien
+                idx = align_score.argmax(dim=2).squeeze()
             else:
                 idx = align_score.squeeze().multinomial(num_samples=1)     
 
@@ -83,6 +96,7 @@ class PointerNetRNNDecoder(RNNDecoderBase):
             idxs.append(idx)
         
         if self.mask_bool:
+            # Mask the sequence for not to get repeated nodes
             align_scores.append(align_scores[0])
             logits.append(logits[0])
             idxs.append(idxs[0])
@@ -116,8 +130,10 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         self.n_glimpses = n_glimpses
         self.sm = nn.Softmax()
         self.decoder = nn.LSTM(input_size, hidden_size, batch_first=True)
+        # dec_inp: entrada al decoder (dec_j. Donde dec_0 = <g>)
         self.dec_input = nn.Parameter(torch.FloatTensor(input_size))
         self.greedy = greedy
+        self.device = device
         
         
     def forward(self, inp, memory_bank, hidden):
@@ -127,8 +143,9 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         Se utiliza una elección Estocastica*
         
         input:
-            dec_inp: entrada al decoder (dec_j. Donde dec_0 = <g>)
             inp: coordenadas de los nodos del TSP [len_tour, batch_size, emb_dim]
+            memory_bank: Encoder Output
+            hidden: Encoder Hidden State
         return:
             align_scores: probs de salida
             rnn_outp: salida del dec
@@ -138,7 +155,7 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
         align_scores = []
         mask = None
         idxs = None
-        dec_inp = self.dec_input.unsqueeze(0).repeat(inp.shape[0],1).cuda() # [batch_size, emb_size]. idx=0 -> token <g>
+        dec_inp = self.dec_input.unsqueeze(0).repeat(inp.shape[0],1).to(self.device) # [batch_size, emb_size]. idx=0 -> token <g>
         for i in range(inp.shape[1]):
             _, hidden = self.decoder(dec_inp.unsqueeze(1), hidden) #[batch, 1, hidden_size]
             g_l = hidden[0].squeeze(0) # query [batch, hidden_size] 
@@ -147,11 +164,16 @@ class PointerNetRNNDecoder_RL(RNNDecoderBase):
             _, align_score, logits, mask = self.pointing(memory_bank, g_l, mask, idxs) # align_score -> [batch_size, #nodes]
             
             if self.greedy:
-                idxs = torch.argmax(align_score, dim=1).squeeze(-1).long()
+                if align_score.dim() > 1:
+                    idxs = torch.argmax(align_score, dim=1).squeeze(-1).long()
+                else:
+                    idxs = torch.argmax(align_score).long()
             else:
                 idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
+                
             for old_idxs in selections:
                 if old_idxs.eq(idxs).data.any():
+                    # Si alguno de los indices se repite, se vuelve a muestrear
                     idxs = align_score.multinomial(num_samples=1).squeeze(-1).long()
                     break
             selections.append(idxs)
@@ -178,6 +200,12 @@ class PointerNet(nn.Module):
     encoder_input_size : input size of encoder
     rnn_hidden_size : rnn hidden dimension size
     dropout : dropout rate
+    batch_size(int)
+    training_type: Supervised or Reinforcement Learning
+    C: Logit clipping
+    T: Temperature
+    greedy(Bool)
+    
     """
     def __init__(self, rnn_type, bidirectional, num_layers,
         encoder_input_size, rnn_hidden_size, dropout=0, batch_size=128, 
@@ -189,12 +217,11 @@ class PointerNet(nn.Module):
         self.encoder = nn.LSTM(encoder_input_size, rnn_hidden_size, num_layers, batch_first=True)
         self.training_type = training_type
         
-        
+        # first input to decoder structure
         self.embedding = nn.Linear(2, encoder_input_size, bias=False)
-        
         self.embedding = self.embedding.to(device)
         
-        if training_type == "Sup":
+        if training_type == "Sup": # TODO: join both type of training in one global routine
             self.decoder = PointerNetRNNDecoder(rnn_type, bidirectional,
                                     num_layers, encoder_input_size, rnn_hidden_size,
                                     dropout,batch_size, mask_bool=mask_bool,
@@ -208,6 +235,16 @@ class PointerNet(nn.Module):
          
       
     def forward(self, inp, inp_len=None, outp=None, outp_len=None, Teaching_Forcing=0):
+        
+        """
+        Pointer Network forward
+        
+        inp(Tensor): Batch [batch, seq_len]
+        inp_len: Sequence len
+        outp:
+        outp_len:
+        Teaching_Forcing: Ratio of supervised teaching for information decoder
+        """
         
         inp = self.embedding(inp) # [batch, seq_len, emb_size]
         
@@ -231,6 +268,9 @@ class PointerNet(nn.Module):
         
 
 def sequence_mask(lengths, max_len=None):
+    """
+    Start a specific lenght mask sequence 
+    """
     bz = lengths.numel()
     max_len = max_len or lengths.max()
     a = torch.arange(0, max_len).type_as(lengths).repeat(bz, 1)

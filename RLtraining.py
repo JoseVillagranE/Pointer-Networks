@@ -37,6 +37,7 @@ layers_of_interest = ["Linear", "Conv1d"]
 
 def weights_init(module, a=-0.08, b=0.08):    
     """
+    reference: Bello, et. all 2017
     input:
         Module -> Neural Network Module
         a -> int. LowerBound
@@ -104,52 +105,81 @@ def PreProcessOutput_batch(batch):
 
 class NeuronalOptm:
     
+    """
+    
+    Clase que contiene todo lo necesario para la optimización neuronal mediante
+    utilización de pointer-networks
+    
+    """
+    
     def __init__(self, input_lenght, rnn_type, bidirectional, num_layers, rnn_hidden_size, 
                  embedding_dim, hidden_dim_critic, process_block_iter,
                  inp_len_seq, lr, C=None, batch_size=10, T=1, training_type="RL", actor_decay_rate=0.96,
                  critic_decay_rate=0.99, step_size=5000, greedy=False):
         
         super().__init__()
+        # Actor del problema
         self.model = PointerNet(rnn_type, bidirectional, num_layers, embedding_dim,
                        rnn_hidden_size, batch_size=batch_size,
                        training_type=training_type, C=C, T=T, greedy=greedy)
         
+        # Inicialización de pesos
         self.model.apply(weights_init)
-        
+        # Inicialización del optimizador
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         
         self.batch_size = batch_size
         self.embedding_dim = embedding_dim
         self.seq_len = inp_len_seq
+        
+        # Primera entrada al decoder
         dec_0 = torch.FloatTensor(embedding_dim)
         embedding = torch.FloatTensor(input_lenght, self.embedding_dim)
-        
+        # Declaración como parametro
         self.dec_0 = nn.Parameter(dec_0)
         self.dec_0.data.uniform_(0, 1)
         
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         
+        # Critico del problema
         self.critic = CriticNetwork(rnn_type, num_layers, bidirectional, embedding_dim,
                                     hidden_dim_critic, process_block_iter, batch_size, C=C)
         
+        # Inicialización de los pesos del critico
         self.critic.apply(weights_init)
-        
+        # Inicialización del optimizador del critico
         self.optim_critic = optim.Adam(self.critic.parameters(), lr=lr)
+        # Función de perdida del critico
         self.critic_loss = torch.nn.MSELoss()
         
+        # Learning rate decay
         self.actor_lr_sch = optim.lr_scheduler.StepLR(self.optimizer, step_size=step_size,
                                                       gamma = actor_decay_rate)
         self.critic_lr_sch = optim.lr_scheduler.StepLR(self.optim_critic,
                                                               step_size=step_size, 
                                                               gamma=critic_decay_rate)
         
-        
+        # Traspaso del modelo a gpu si corresponde
         self.model = self.model.to(self.device)
         self.critic = self.critic.to(self.device)
         self.dec_0 = self.dec_0.to(self.device)
             
         
     def step(self, batch_inp, clip_norm=1.0):
+        
+        """
+        Realiza un paso en la optimización del modelo
+        
+        input:
+            batch_inp: Batch de entrada (Tensor)
+            clip_norm: Gradient Clipping
+            
+        output:
+            Actor_loss (float)
+            Critic_loss (float)
+            tour_lenght (float): Largo del tour
+        
+        """
         
         align_score, memory_bank, dec_memory_bank, idxs = self.model(batch_inp)
         baseline = self.critic(batch_inp)
@@ -182,13 +212,21 @@ class NeuronalOptm:
         tour_length_mean = tour_length.detach().mean()
         return actor_loss_item, critic_loss_item, tour_length_mean
     
-    def training(self, train_ds, eval_ds, attention_size=128, beam_width=2,
-                 lr=1e-3, clip_norm=1.0, weight_decay=0.1, step_log=10, val_step=1000,
+    def training(self, train_ds, eval_ds, clip_norm=1.0,
+                 step_log=10, val_step=1000,
                  save_model_file="RLPointerModel.pt"):
         
-        
+        """
+        Reinforcement Learning Training
+        input:
+            Training Dataset (Pytorch Dataset)
+            Validation Dataset (Pytorch Dataset)
+            clip norm: Gradient Clipping
+            step_log: Frequency of information log
+            val_step: Frequency of Validation step
+        """
         t0 = time()
-  
+        # Data Loader of sequences
         train_dl = DataLoader(train_ds, batch_size=self.batch_size)
         eval_dl = DataLoader(eval_ds, batch_size=self.batch_size)
 
@@ -196,6 +234,7 @@ class NeuronalOptm:
         list_of_actor_loss = []
         list_of_critic_loss = []
         list_of_tour_length_mean = []
+        # Networks in train mode (Affect Dropout and Batch Normalization)
         self.model = self.model.train()
         self.critic = self.critic.train()
         actor_total_loss = 0.
@@ -203,6 +242,7 @@ class NeuronalOptm:
         total_tour_length = 0.
         for step, b_inp in enumerate(train_dl):
             b_inp = Variable(b_inp).to(self.device)
+            # One step
             actor_loss, critic_loss, tour_length_mean = self.step(b_inp,
                                                                   clip_norm=clip_norm)
             actor_total_loss += actor_loss
@@ -214,7 +254,7 @@ class NeuronalOptm:
                 print(f"Critic Loss: {critic_total_loss/(step+1):.3f} ||", end=' ')
                 print(f"Tour Length: {total_tour_length/(step+1):.2f}")
                 
-            
+            # Validation Step
             if (step+1)%val_step == 0:
                 val_total_tour_length = 0
                 batch_cnt = 0
@@ -235,7 +275,7 @@ class NeuronalOptm:
             list_of_critic_loss.append(critic_total_loss/(step+1))
             list_of_tour_length_mean.append(total_tour_length/(step+1))
             
-        
+        # Model save
         torch.save(self.model.state_dict(), save_model_file)
         t1 = time()
         t = t1 - t0
@@ -249,6 +289,10 @@ class NeuronalOptm:
     
     
     def eval_model(self, eval_ds, batch_size=1, search='None', batch_sampling=16):
+        
+        """
+        Evaluation of the model
+        """
         
         self.model = self.model.eval().to(self.device)
         countAcc = 0
@@ -281,6 +325,10 @@ class NeuronalOptm:
         
     
     def inference(self, example):
+        
+        """
+        Inference of one tour
+        """
     
         self.model.eval()
         example = Variable(example).to(self.device)
@@ -305,10 +353,18 @@ class NeuronalOptm:
         plt.legend(loc='best')
         
     def load_model(self, path):
+        """
+        Load model
+        path(str): path to .pt file 
+        """
         self.model.load_state_dict(torch.load(path))
         
         
     def active_search(self, example, batch_sampling, steps=16, clip_norm=2.0, alpha = 0.2):
+        
+        """
+        Active Search
+        """
         
         batch = example.repeat(batch_sampling, 1, 1).to(self.device) # [batch, #nodes, 2]
         (batch_size, n_nodes, _) = batch.size()
@@ -346,6 +402,9 @@ class NeuronalOptm:
         
     @staticmethod
     def sampling(model, example, batch_sampling, device='cpu'):
+        """
+        Sampling the best solution for one example
+        """
         batch = example.repeat(batch_sampling, 1, 1) # [batch, #nodes, 2]
         probs, _, _, idxs = model(batch)
         sample_solution = tensor_sort(batch, idxs, dim=1).squeeze()

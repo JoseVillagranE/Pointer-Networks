@@ -56,6 +56,7 @@ class Attention(nn.Module):
         tgt : target values (bz, hidden_dim). dec_i or q 
         src_lengths : source values length
         """
+        # Pointing and Attending Mechanism (Appendix A)
         u1 = self.W_q(tgt).unsqueeze(-1).repeat(1, 1, src.shape[1])
         u2 = self.W_ref(src.permute(0, 2, 1)) # [Batch, hidden_dim, seq_len]
         V = self.V.unsqueeze(0).unsqueeze(0).repeat(src.shape[0], 1, 1)
@@ -69,6 +70,7 @@ class Attention(nn.Module):
             logit, mask = apply_mask(logit, mask, prev_idxs)
         # Normalize weights
         probs = F.softmax(logit/self.T, -1) # [batch, seq_len]
+        # Batch Matrix Multiplication
         d_prime= torch.bmm(u2, probs.unsqueeze(-1)).squeeze(-1) # [batch, hidden_size]
         if self.hidden_att_bool:
             concat_d = (d_prime.transpose(0, 1), tgt.transpose(0, 1))
